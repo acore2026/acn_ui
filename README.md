@@ -92,6 +92,7 @@ Behavior:
 - Pull requests build the Docker image to verify the container path.
 - Pushes to `main` build and publish the image to `ghcr.io/acore2026/acn_ui`.
 - Tags matching `v*` also publish tagged images.
+- Tag builds attach a downloadable `acn-ui-<tag>.tar.gz` image archive to the GitHub Release assets section.
 - The default branch also receives the `latest` tag.
 
 The workflow uses GitHub Container Registry with the built-in `GITHUB_TOKEN`. GitHub Actions must have permission to write packages for publishing to succeed.
