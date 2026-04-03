@@ -11,6 +11,8 @@ import { cn } from './utils';
 import {
   BACKEND_ENDPOINT_STORAGE_KEY,
   buildBackendUrl,
+  DEBUG_MODE_STORAGE_KEY,
+  getInitialDebugMode,
   getInitialBackendEndpointDraft,
   getRuntimeBackendEndpoint,
   normalizeBackendEndpoint,
@@ -207,13 +209,6 @@ const STAGE_SCENARIO_MAP: Record<number, string[]> = {
   2: ['state_5'],
   3: ['state_6', 'state_8'],
 };
-
-function isDebugPresentationUrl() {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.location.origin === 'http://101.245.78.174:8085' && window.location.search.includes('debug');
-}
 
 function parseScenarioDoc(raw: string): ScenarioDoc {
   const parsed = JSON.parse(raw) as ScenarioDoc;
@@ -1881,14 +1876,15 @@ function CmccLogo() {
   return (
     <img
       className="cmcc-logo"
-      src="https://upload.wikimedia.org/wikipedia/en/9/90/China_Mobile_logo_%282019%29.svg"
+      src="/cmcc-logo.svg"
       alt="CMCC"
     />
   );
 }
 
 function Dashboard() {
-  const debugMode = isDebugPresentationUrl();
+  const initialDebugMode = getInitialDebugMode();
+  const [debugMode, setDebugMode] = useState(initialDebugMode);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scriptText, setScriptText] = useState(DEFAULT_SCRIPT_YAML);
   const [scriptError, setScriptError] = useState<string | null>(null);
@@ -1908,7 +1904,7 @@ function Dashboard() {
   const [backendResetPending, setBackendResetPending] = useState(false);
   const [lastBackendPollAt, setLastBackendPollAt] = useState<number | null>(null);
   const [canvasViewport, setCanvasViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
-  const [backendEnabled, setBackendEnabled] = useState(true);
+  const [backendEnabled, setBackendEnabled] = useState(() => !initialDebugMode);
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<PresentationMessage | null>(null);
   const scriptRef = useRef(scriptDoc);
@@ -1917,6 +1913,7 @@ function Dashboard() {
   const settingsPopoutRef = useRef<HTMLDivElement | null>(null);
   const presentationChatListRef = useRef<HTMLDivElement | null>(null);
   const previousPlaybackPhaseRef = useRef<DemoPhase>(playback.phase);
+  const previousDebugModeRef = useRef(debugMode);
   const transitionRef = useRef<{
     nodeIds: string[];
     edgeIds: string[];
@@ -1947,6 +1944,19 @@ function Dashboard() {
   useEffect(() => {
     playbackRef.current = playback;
   }, [playback]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(DEBUG_MODE_STORAGE_KEY, String(debugMode));
+    }
+    if (debugMode && !previousDebugModeRef.current) {
+      setBackendEnabled(false);
+      setBackendStage(0);
+      setBackendConnected(false);
+      setBackendError(null);
+    }
+    previousDebugModeRef.current = debugMode;
+  }, [debugMode]);
 
   useEffect(() => {
     if (!settingsOpen) {
@@ -2366,6 +2376,18 @@ function Dashboard() {
               {settingsOpen && (
                 <div className="settings-popout">
                   <div className="settings-popout-title">Settings</div>
+                  <label className="settings-field settings-switch-field">
+                    <span className="settings-label">Debug Mode</span>
+                    <button
+                      type="button"
+                      className={cn('settings-switch', debugMode && 'settings-switch-active')}
+                      onClick={() => setDebugMode((enabled) => !enabled)}
+                      aria-pressed={debugMode}
+                      title={debugMode ? 'Disable debug mode' : 'Enable debug mode'}
+                    >
+                      <span className="settings-switch-thumb" />
+                    </button>
+                  </label>
                   <label className="settings-field">
                     <span className="settings-label">Backend Endpoint</span>
                     <input

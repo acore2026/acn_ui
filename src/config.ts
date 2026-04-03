@@ -1,4 +1,5 @@
 export const BACKEND_ENDPOINT_STORAGE_KEY = 'acn.demo.backendEndpoint';
+export const DEBUG_MODE_STORAGE_KEY = 'acn.demo.debugMode';
 
 declare global {
   interface Window {
@@ -48,6 +49,16 @@ export function getInitialBackendEndpointDraft() {
     return getRuntimeBackendEndpoint();
   }
   return window.localStorage.getItem(BACKEND_ENDPOINT_STORAGE_KEY) ?? getRuntimeBackendEndpoint();
+}
+
+export function getInitialDebugMode() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  if (window.location.origin === 'http://101.245.78.174:8085' && window.location.search.includes('debug')) {
+    return true;
+  }
+  return window.localStorage.getItem(DEBUG_MODE_STORAGE_KEY) === 'true';
 }
 
 export function buildBackendUrl(path: string) {
