@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { 
   Repeat, Cpu, Play, Radio, Router, Smartphone, Square,
-  UserCheck, Settings, Database, Waypoints, Globe, Sparkles, Bot, Wrench, LoaderCircle, BrainCircuit, CheckCircle2, ScanSearch, SkipBack, SkipForward, RotateCcw, WifiOff, Ellipsis, MessageSquareText, Workflow, ScrollText, X
+  UserCheck, Settings, Database, Waypoints, Globe, Sparkles, Bot, Wrench, LoaderCircle, BrainCircuit, CheckCircle2, ScanSearch, SkipBack, SkipForward, RotateCcw, WifiOff, Ellipsis, MessageSquareText, Workflow, ScrollText, X, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Background, BaseEdge, Handle, Position, ReactFlow, ReactFlowProvider, getBezierPath, applyNodeChanges, applyEdgeChanges, type Edge, type EdgeProps, type Node, type NodeProps, type NodeTypes, type OnNodesChange, type OnEdgesChange, type Viewport } from '@xyflow/react';
@@ -1135,6 +1135,21 @@ stages:
           - node: robot-dog
             text: "Verifying Peer Digital ID"
             icon: scan
+      - id: stage4-handover
+        kind: talk
+        delayMs: 3000
+        presentation:
+          title: "The robots begin the package handoff"
+          body: |
+            - The peer identity check has succeeded.
+            - Both robots proceed with the package handoff.
+        bubbles:
+          - node: mno-endpoint
+            text: "Verified, comencing package handover!"
+            icon: done
+          - node: robot-dog
+            text: "Verified, comencing package handover!"
+            icon: done
 `;
 
 function parseDemoScript(text: string): DemoScript {
@@ -1907,6 +1922,7 @@ function Dashboard() {
   const [backendEnabled, setBackendEnabled] = useState(() => !initialDebugMode);
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<PresentationMessage | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const scriptRef = useRef(scriptDoc);
   const playbackRef = useRef(playback);
   const pollInFlightRef = useRef(false);
@@ -1953,6 +1969,9 @@ function Dashboard() {
       setBackendEnabled(false);
       setBackendStage(0);
       setBackendConnected(false);
+      setBackendError(null);
+    } else if (!debugMode && previousDebugModeRef.current) {
+      setBackendEnabled(true);
       setBackendError(null);
     }
     previousDebugModeRef.current = debugMode;
@@ -2376,18 +2395,6 @@ function Dashboard() {
               {settingsOpen && (
                 <div className="settings-popout">
                   <div className="settings-popout-title">Settings</div>
-                  <label className="settings-field settings-switch-field">
-                    <span className="settings-label">Debug Mode</span>
-                    <button
-                      type="button"
-                      className={cn('settings-switch', debugMode && 'settings-switch-active')}
-                      onClick={() => setDebugMode((enabled) => !enabled)}
-                      aria-pressed={debugMode}
-                      title={debugMode ? 'Disable debug mode' : 'Enable debug mode'}
-                    >
-                      <span className="settings-switch-thumb" />
-                    </button>
-                  </label>
                   <label className="settings-field">
                     <span className="settings-label">Backend Endpoint</span>
                     <input
@@ -2398,20 +2405,34 @@ function Dashboard() {
                       spellCheck={false}
                     />
                   </label>
-                  {debugMode && (
+                  <div className="settings-switch-stack">
                     <label className="settings-field settings-switch-field">
-                      <span className="settings-label">Backend</span>
+                      <span className="settings-label">Debug Mode</span>
                       <button
                         type="button"
-                        className={cn('settings-switch', backendEnabled && 'settings-switch-active')}
-                        onClick={() => setBackendEnabled((enabled) => !enabled)}
-                        aria-pressed={backendEnabled}
-                        title={backendEnabled ? 'Disable backend' : 'Enable backend'}
+                        className={cn('settings-switch', debugMode && 'settings-switch-active')}
+                        onClick={() => setDebugMode((enabled) => !enabled)}
+                        aria-pressed={debugMode}
+                        title={debugMode ? 'Disable debug mode' : 'Enable debug mode'}
                       >
                         <span className="settings-switch-thumb" />
                       </button>
                     </label>
-                  )}
+                    {debugMode && (
+                      <label className="settings-field settings-switch-field">
+                        <span className="settings-label">Backend</span>
+                        <button
+                          type="button"
+                          className={cn('settings-switch', backendEnabled && 'settings-switch-active')}
+                          onClick={() => setBackendEnabled((enabled) => !enabled)}
+                          aria-pressed={backendEnabled}
+                          title={backendEnabled ? 'Disable backend' : 'Enable backend'}
+                        >
+                          <span className="settings-switch-thumb" />
+                        </button>
+                      </label>
+                    )}
+                  </div>
                   <div className="settings-actions">
                     <button className="primary-button settings-button" onClick={() => persistBackendEndpoint(backendEndpointDraft)}>Save</button>
                   </div>
@@ -2458,7 +2479,7 @@ function Dashboard() {
           </div>
         </div>
       </header>
-      <main className="dashboard-main">
+      <main className={cn("dashboard-main", sidebarCollapsed && "dashboard-main-sidebar-collapsed")}>
         <section className="canvas-area">
           <ReactFlow
             nodes={nodes}
@@ -2480,52 +2501,63 @@ function Dashboard() {
             <Background gap={40} size={1} color="#f1f5f9" />
           </ReactFlow>
         </section>
-        <aside className="sidebar">
-          <div className="presentation-panel">
-            <div className="presentation-panel-kicker">✨ AI Narrative</div>
-            <h2 className="presentation-panel-title">{presentationCard.title}</h2>
-            <div className="presentation-panel-body">{renderMessageBody(presentationCard.body)}</div>
-            <div className="presentation-chat">
-              <div className="presentation-chat-kicker">Agent Chat & Messages</div>
-              <div ref={presentationChatListRef} className="presentation-chat-list">
-                {presentationCard.messages.map((message, index) => (
-                  <button
-                    key={`${message.kind}-${message.title}-${index}`}
-                    type="button"
-                    className={cn(
-                      'presentation-chat-item',
-                      message.details?.sections?.length && 'presentation-chat-item-clickable',
-                      index < presentationCard.messages.length - 1 && 'presentation-chat-item-history',
-                    )}
-                    onClick={() => {
-                      if (message.details?.sections?.length) {
-                        setSelectedMessage(message);
-                      }
-                    }}
-                  >
-                    <div className="presentation-chat-icon">
-                      <PresentationMessageIcon icon={message.icon} />
-                    </div>
-                    <div className="presentation-chat-content">
-                      <div className="presentation-chat-meta">
-                      <span className="presentation-chat-speaker">{message.title}</span>
-                      {message.time ? <span className="presentation-chat-time">{message.time}</span> : null}
-                    </div>
-                    {message.chips?.length ? (
-                      <div className="presentation-chat-chips">
-                        {message.chips.map((chip) => (
-                          <span key={chip} className="presentation-chat-chip">{chip}</span>
-                        ))}
+        <div className={cn("sidebar-shell", sidebarCollapsed && "sidebar-shell-collapsed")}>
+          <button
+            type="button"
+            className="sidebar-collapse-button"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            title={sidebarCollapsed ? "Expand narrative tray" : "Collapse narrative tray"}
+            aria-label={sidebarCollapsed ? "Expand narrative tray" : "Collapse narrative tray"}
+          >
+            {sidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+          </button>
+          <aside className="sidebar">
+            <div className="presentation-panel">
+              <div className="presentation-panel-kicker">✨ AI Narrative</div>
+              <h2 className="presentation-panel-title">{presentationCard.title}</h2>
+              <div className="presentation-panel-body">{renderMessageBody(presentationCard.body)}</div>
+              <div className="presentation-chat">
+                <div className="presentation-chat-kicker">Agent Chat & Messages</div>
+                <div ref={presentationChatListRef} className="presentation-chat-list">
+                  {presentationCard.messages.map((message, index) => (
+                    <button
+                      key={`${message.kind}-${message.title}-${index}`}
+                      type="button"
+                      className={cn(
+                        'presentation-chat-item',
+                        message.details?.sections?.length && 'presentation-chat-item-clickable',
+                        index < presentationCard.messages.length - 1 && 'presentation-chat-item-history',
+                      )}
+                      onClick={() => {
+                        if (message.details?.sections?.length) {
+                          setSelectedMessage(message);
+                        }
+                      }}
+                    >
+                      <div className="presentation-chat-icon">
+                        <PresentationMessageIcon icon={message.icon} />
                       </div>
-                    ) : null}
-                    <div className="presentation-chat-body">{renderMessageBody(message.body)}</div>
-                    </div>
-                  </button>
-                ))}
+                      <div className="presentation-chat-content">
+                        <div className="presentation-chat-meta">
+                        <span className="presentation-chat-speaker">{message.title}</span>
+                        {message.time ? <span className="presentation-chat-time">{message.time}</span> : null}
+                      </div>
+                      {message.chips?.length ? (
+                        <div className="presentation-chat-chips">
+                          {message.chips.map((chip) => (
+                            <span key={chip} className="presentation-chat-chip">{chip}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="presentation-chat-body">{renderMessageBody(message.body)}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        </div>
       </main>
       {selectedMessage?.details?.sections?.length ? (
         <div className="message-detail-overlay" onClick={() => setSelectedMessage(null)}>
