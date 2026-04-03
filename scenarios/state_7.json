@@ -1,0 +1,8 @@
+{
+  "description": "Out for delivery",
+  "domain": {
+    "line_file": "line_6.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  }
+}

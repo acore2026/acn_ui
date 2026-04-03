@@ -1,0 +1,8 @@
+{
+  "description": "Select Agent to interact with",
+  "domain": {
+    "line_file": "line_9.json",
+    "robot": ["ue-mno-a","ue1-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  }
+}

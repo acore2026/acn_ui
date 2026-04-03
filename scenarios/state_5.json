@@ -1,0 +1,33 @@
+{
+  "description": "Courier picking up the order",
+  "domain": {
+    "line_file": "line_5.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "alarm": false
+  },
+  "ui_log": {
+    "UP": [
+      {"Time": "2026-01-08 10:00:05", "Content": "Cross-domain communication between RobotArm and Ordering Agent"}
+    ]
+  },
+  "pipeline": [
+  {
+    "sender": "Ordering Agent(OTT)",
+    "receiver": "Agent GW(OTT)",
+    "action": "Pickup and delivery",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(OTT)",
+    "receiver": "Agent GW(MNO B)",
+    "action": "Pickup and delivery",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(MNO B)",
+    "receiver": "RobotArm(MNO B)",
+    "action": "Pickup and delivery",
+    "type": "normal"
+  }
+]
+}

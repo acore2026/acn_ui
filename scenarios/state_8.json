@@ -1,0 +1,15 @@
+{
+  "description": "Order completed",
+  "domain": {
+    "line_file": "line_7.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  },
+
+  "ui_log": {
+    "Delivery": [
+      {"Time": "2026-01-08 10:00:05", "Content": "The RobotDog and the RobotArm authenticate each other using Near-Field Communication"},
+      {"Time": "2026-01-08 10:00:05", "Content": "Task is completed"}
+    ]
+  }
+}

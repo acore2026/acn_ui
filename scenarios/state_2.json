@@ -1,0 +1,92 @@
+{
+  "description": "Create family domain",
+  "domain": {
+    "line_file": "line_2.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  },
+
+  "ui_log": {
+    "Domain": [
+      {"Time": "2026-01-08 10:00:05", "Content": "Update the subscription data"},
+      {"Time": "2026-01-08 10:00:05", "Content": "Issue a Family Domain access VC"},
+      {"Time": "2026-01-08 10:00:05", "Content": "RobotDog/UE establish a Family Domain session"}
+    ]
+  },
+  "agent_chat": [
+     {
+    "agent": "ACN Agent(CMCC)",
+    "time": "2026-01-08 10:05:20",
+    "think": "Received 'Create Domain' request from UE. Domain_ID: Family Domain. Orchestration required: 1. Identity anchoring via IDM for Subnet VC; 2. User-plane establishment via SM Tool.",
+    "content": "**Status:** 🟢 `Processing` | **Task:** `UE_Domain_Creation` \n**Request ID:** `DOM_REQ_9921_X` (Domain ID: `Family Domain`)\n\n#### 🔐 Phase 1: Identity & Access Credentialing\n- **Action:** Invoking MCP Tool `idm_vc_issuance_tool`  \n- **Parameters:** \n  ```json\n  {\n    \"Subject\": \"UE Assistant/Robot Arm\",\n    \"Issuer\": \"IDM_CMCC\",\n    \"Claim\": \"Subnet_Access_Authorized\",\n    \"Domain_Scope\": \"Family Domain\"\n  }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *Verifiable Credential (VC) issued. Proof_Type: Ed25519Signature2020.*\n\n#### 🛣️ Phase 2: Session & User-Plane Orchestration\n- **Action:** Invoking MCP Tool `session_communication_manage_tool`  \n- **Parameters:** \n  ```json\n  {\n    \"Operation\": \"Push_U_Plane_Config\",\n    \"Target_UPF\": \"Edge_UPF_Node_04\",\n    \"PDU_Session_Type\": \"IPv4v6\",\n    \"QoS_Policy\": \"Ultra_Low_Latency\"\n  }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *U-Plane path established. TEID: 0x7E3A_9F12. Rules pushed to UPF.*\n\n### 🏆 Final Status: **DOMAIN_CREATED_SUCCESSFULLY**\n**Notification:** Subnet `Family Domain` is now operational for `UE Assistant`. Access VC and U-Plane routing have been provisioned and verified."
+    }
+    ],
+  "pipeline": [
+  {
+    "sender": "UE(CMCC)",
+    "receiver": "ACN Agent(CMCC)",
+    "action": "Create a Family Domain",
+    "type": "normal"
+  },
+  {
+    "sender": "ACN Agent(CMCC)",
+    "receiver": "IDM(CMCC)",
+    "action": "Apply for Family Domain VCs",
+    "type": "normal"
+  },
+  {
+    "sender": "IDM(CMCC)",
+    "receiver": "ACN Agent(CMCC)",
+    "action": "Family Domain VCs",
+    "type": "normal"
+  },
+  {
+    "sender": "ACN Agent(CMCC)",
+    "receiver": "SCF(CMCC)",
+    "action": "Push UP configuration",
+    "type": "normal"
+  },
+  {
+    "sender": "SCF(CMCC)",
+    "receiver": "UP(CMCC)",
+    "action": "Push UP configuration",
+    "type": "normal"
+  },
+  {
+    "sender": "UP(CMCC)",
+    "receiver": "SCF(CMCC)",
+    "action": "ok",
+    "type": "normal"
+  },
+  {
+    "sender": "SCF(CMCC)",
+    "receiver": "ACN Agent(CMCC)",
+    "action": "ok",
+    "type": "normal"
+  },
+  {
+    "sender": "ACN Agent(CMCC)",
+    "receiver": "UE(CMCC)",
+    "action": "Family Domain VC",
+    "type": "normal"
+  },
+  {
+    "sender": "ACN Agent(CMCC)",
+    "receiver": "RobotDog(CMCC)",
+    "action": "Family Domain VC",
+    "type": "normal"
+  },
+  {
+    "sender": "UE(CMCC)",
+    "receiver": "UP(CMCC)",
+    "action": "Establish a Family Domain session",
+    "type": "normal"
+  },
+  {
+    "sender": "RobotDog(CMCC)",
+    "receiver": "UP(CMCC)",
+    "action": "Establish a Family Domain session",
+    "type": "normal"
+  }
+]
+}

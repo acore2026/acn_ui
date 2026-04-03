@@ -1,0 +1,53 @@
+{
+  "description": "Order received, Kitchen preparing.",
+  "domain": {
+    "line_file": "line_3.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  },
+
+  "ui_log": {
+    "UP": [
+      {"Time": "2026-01-08 10:00:05", "Content": "GTP-U+ in-Band channel setup"},
+      {"Time": "2026-01-08 10:00:05", "Content": "Cross-domain communication between UE and Ordering Agent"}
+    ]
+  },
+  "pipeline": [
+  {
+    "sender": "UE(CMCC)",
+    "receiver": "UP(CMCC)",
+    "action": "Order Food",
+    "type": "normal"
+  },
+  {
+    "sender": "UP(CMCC)",
+    "receiver": "ACF(CMCC)",
+    "action": "Order Food",
+    "type": "normal"
+  },
+  {
+    "sender": "ACF(CMCC)",
+    "receiver": "Agent GW(OTT)",
+    "action": "Order Food",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(OTT)",
+    "receiver": "Ordering Agent(OTT)",
+    "action": "Order Food",
+    "type": "normal"
+  },
+  {
+    "sender": "UE(CMCC)",
+    "receiver": "UP(CMCC)",
+    "action": "Assign the pickup task",
+    "type": "normal"
+  },
+  {
+    "sender": "UP(CMCC)",
+    "receiver": "RobotArm(CMCC)",
+    "action": "Assign the pickup task",
+    "type": "normal"
+  }
+]
+}

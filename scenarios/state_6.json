@@ -1,0 +1,40 @@
+{
+  "description": "Out for delivery",
+  "domain": {
+    "line_file": "line_6.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  },
+  "pipeline": [
+  {
+    "sender": "RobotDog(CMCC)",
+    "receiver": "UP(CMCC)",
+    "action": "GIS data",
+    "type": "normal"
+  },
+  {
+    "sender": "UP(CMCC)",
+    "receiver": "ACF(CMCC)",
+    "action": "GIS data",
+    "type": "normal"
+  },
+  {
+    "sender": "ACF(CMCC)",
+    "receiver": "Agent GW(MNO B)",
+    "action": "GIS data",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(MNO B)",
+    "receiver": "UP(MNO B)",
+    "action": "GIS data",
+    "type": "normal"
+  },
+  {
+    "sender": "UP(MNO B)",
+    "receiver": "RobotArm(MNO B)",
+    "action": "GIS data",
+    "type": "normal"
+  }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Interact with CMCC's RobotDog",
+  "domain": {
+    "line_file": "line_10.json",
+    "robot": ["ue-mno-a","ue1-mno-a","dog-mno-b", "robot-mno-a"],
+    "current_stage": "creating_domain"
+  },
+
+  "ui_log": {
+    "Interact": [
+      {"Time": "2026-01-08 10:00:05", "Content": "Interact with CMCC's RobotDog"}
+    ]
+  }
+}

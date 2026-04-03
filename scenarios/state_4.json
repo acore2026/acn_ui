@@ -1,0 +1,50 @@
+{
+  "description": "Find courier",
+  "domain": {
+    "line_file": "line_4.json",
+    "robot": ["ue-mno-a","dog-mno-b", "robot-mno-a"],
+    "alarm": false
+  },
+
+  "ui_log": {
+    "Agent Discovery": [
+      {"Time": "2026-01-08 10:00:05", "Content": "The local gateway did not discover any available agents"},
+      {"Time": "2026-01-08 10:00:05", "Content": "Cross-Gateway discovery result is RobotArm"},
+      {"Time": "2026-01-08 10:00:01", "Content": "Peer service authentication is complete"}
+    ]
+  },
+  "agent_chat": [
+{
+    "agent": "Agent GW(MNO B)",
+    "time": "2026-01-08 10:15:30",
+    "think": "Cross-Gateway agent discovery request received. Criteria: [Capability: Delivery, Payload >= 2kg, Range >= 3km]. Process: 1. Search repository for matching profiles; 2. Validate requester's access rights.",
+    "content": "**Status:** 🟢 `Active` | **Task:** `Agent_Discovery_&_Matching` \n**Query Profile:** `Delivery_Robot` | **Constraints:** `Payload: >2kg, Range: >3km` \n\n#### 📂 Phase 1: Semantic Discovery & Filtering\n- **Action:** Invoking MCP Tool `ardf_query_tool`  \n- **Parameters:** \n  ```json\n  {\n    \"search_criteria\": {\n      \"type\": \"Physical_Agent\",\n      \"capabilities\": [\"Delivery\", \"Outdoor_Navigation\"],\n      \"min_payload_kg\": 2,\n      \"min_range_km\": 3\n    }\n  }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *Match found: [RobotArm (CMCC)]. Payload: 10kg, Range: 10km.*\n\n#### 🔐 Phase 2: Service Entitlement Verification\n- **Action:** Invoking MCP Tool `entitlement_verify_tool`  \n- **Parameters:** \n  ```json\n  {\n    \"requester_id\": \"Ordering Agent\",\n    \"target_resource\": \"RobotArm\",\n    \"operation\": \"Discovery_Read\"\n  }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *Requester authorized. Tier: Gold_Partner. Access to high-res metadata granted.*\n\n### 🏆 Final Status: **AGENT_DISCOVERY_COMPLETED**\n**Result:** Matching Agent found and verified. **RobotArm (did:3gpp:OT12MnyKcv@mnoB.com)** Agent Card has been prepared for dispatch to the requester. Metadata includes full capability VCs."
+  }
+    ],
+  "pipeline": [
+  {
+    "sender": "Ordering Agent(OTT)",
+    "receiver": "Agent GW(OTT)",
+    "action": "Agent discovery request",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(OTT)",
+    "receiver": "Agent GW(MNO B)",
+    "action": "Agent discovery request",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(MNO B)",
+    "receiver": "Agent GW(OTT)",
+    "action": "Agent card of RobotArm",
+    "type": "normal"
+  },
+  {
+    "sender": "Agent GW(OTT)",
+    "receiver": "Ordering Agent(OTT)",
+    "action": "Agent card of RobotArm",
+    "type": "normal"
+  }
+]
+}

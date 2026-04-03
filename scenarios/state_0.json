@@ -1,0 +1,279 @@
+{
+  "description": "RobotArm has registered to network.",
+  "domain": {
+    "line_file": "line_0.json",
+    "robot": ["ue-mno-a","dog-mno-b"]
+  },
+  "ui_log": {
+    "Register": [
+      {"Time": "2026-01-08 10:00:01", "Content": "RobotArm was assigned an AgentID by MNOB."},
+      {"Time": "2026-01-08 10:00:01", "Content": "RobotArm registered its capabilities and published an AgentCard to MNOB."}
+    ]
+  },
+  "agent_chat": [
+      {
+        "agent": "ACN Agent(MNOB)",
+        "time": "2026-01-08 10:00:01",
+        "think": "Received 'Apply for a digital ID' request for RobotArm. Initializing Identity Issuance Pipeline. Target: Generate 3GPP-compliant DID and immutable ledger anchoring.",
+        "content": "**Status:** 🟢 `Online` | **Secure Channel:** `Established`  \n**Request ID:** `REQ_RBT_001_EY` \n\n#### 📂 Phase 1: Entitlement & Subscription Validation\n- **Action:** Invoking MCP Tool `idm_contract_query_tool`\n- **Parameters:** \n  ```json\n  { \"Device\": \"RobotArm\", \"Owner\": \"did:3gpp:OT12MnyKcv@mnoB.com\"}\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *Subscription valid. SLAM_Slice_ID: 0x4A2B.*\n\n#### 🔑 Phase 2: DID & VC Generation\n- **Action:** Invoking MCP Tool `idm_did_generator_tool`\n- **Parameters:** \n  ```json\n  { \"Namespace\": \"3gpp\", \"Identifier\": \"RobotArm\", \"Entropy\": \"Secure_Hardware_Seed\" }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *DID Created: did:3gpp:OT12MnyKcv@mnoB.com*\n\n- **Action:** Invoking MCP Tool `digital_signature_tool`\n- **Parameters:** \n  ```json\n  { \"Data_Type\": \"Verifiable_Credential\", \"Algo\": \"Ed25519\", \"Key_Ref\": \"MNOB_Identity_Vault_01\" }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *VC Document Signed. Signature: 0x5d9b...e2f1*\n\n#### ⛓️ Phase 3: Distributed Ledger Anchoring\n- **Action:** Invoking MCP Tool `idm_blockchain_ctrl_tool`\n- **Parameters:** \n  ```json\n  { \"Action\": \"Anchor_DID\", \"Ledger\": \"Public_Net\", \"Payload_Hash\": \"0x8b3...12c\" }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *Transaction Committed. Block: #10294, Tx_Hash: 0xaf77...33de8*\n\n---\n### 🏆 Final Status: **DIGITAL_IDENTITY_ISSUED**\n**To RobotArm(MNOB):** Your Sovereign Identity is now **Active**. Credentials pushed to secure enclave. Agent card published to Gateway."    },
+      {
+      "agent": "ACN Agent(MNOB)",
+      "time": "2026-01-08 10:20:15",
+      "think": "Inbound Agent Registration request detected from '\tdid:3gpp:OT12MnyKcv@mnoB.com'. Validating protocol compliance (ANP/AGP) and orchestrating profile publication via ARDF.",
+      "content": "**Status:** 🟢 `Online` | **Task:** `Agent_Card_Registration` \n**Subject:** `did:3gpp:OT12MnyKcv@mnoB.com` \n\n#### 📇 Phase 1: Agent Card Publication \n- **Action:** Invoking MCP Tool `ardf_registration_tool`  \n- **Parameters:** \n  ```json\n  {\n    \"action\": \"Publish_Agent_Card\",\n    \"agent_metadata\": {\n      \"id\": \"did:3gpp:OT12MnyKcv@mnoB.com\",\n      \"vendor\": \"RobotFactory\",\n      \"capabilities\": [\"Arm\", \"Payload: 10KG\"],\n      \"access_endpoint\": \"acn://gateway.MNOB.net/did:3gpp:OT12MnyKcv@mnoB.com\"\n    },\n    \"visibility\": \"Public_Service\"\n  }\n  ```\n- **Result:** ✅ `SUCCESS` | **Output:** *Agent Card successfully registered in ARDF. Entry_Index: #RC-99812.*\n\n### 🏆 Final Status: **AGENT_REGISTRATION_COMPLETED**\n**Notification:** RobotArm is now **Discoverable** and **Addressable**. Agent Card is live on ARDF."
+    }],
+  "robot": {
+     "definitions": {
+      "RobotDog": {
+        "Vendor": "Unitree",
+        "Capability": "[Camera, Payload: 10KG, Battery: 10km]",
+        "Access Domain": "CMCC"
+      },
+      "UE Assistant": {
+        "Vendor": "Huawei",
+        "Capability": "[Task Issuer]",
+        "ID": "did:3gpp:AT1RFc7pty@cmcc.com",
+        "Access Domain": "CMCC"
+      },
+      "RobotArm": {
+        "Vendor": "RobotFactory",
+        "Capability": "[Arm, Payload: 10KG/10KM]",
+        "ID": "did:3gpp:OT12MnyKcv@mnoB.com",
+        "Access Domain": "MNOB"
+      },
+      "Ordering Agent": {
+        "Vendor": "Food OTT",
+        "Capability": "[Food Ordering]",
+        "ID": "did:3gpp:1FtasS87Lq@ott.com",
+        "Access Domain": "OTT"
+      }
+    },
+    "bindings": {
+      "CMCC": ["UE Assistant","Ordering Agent","RobotArm"]
+    }
+  },
+    "pipeline": [
+  {
+    "sender": "RobotArm(MNO B)",
+    "receiver": "ACN Agent(MNO B)",
+    "action": "Apply for a digital ID for RobotArm",
+    "type": "normal",
+    "content": {
+    }
+  },
+  {
+    "sender": "ACN Agent(MNO B)",
+    "receiver": "IDM(MNO B)",
+    "action": "Apply for a digital ID for RobotArm",
+    "type": "normal",
+    "content": {
+      "protocol": "NAS",
+      "header": "",
+      "content": {
+      }
+    }
+  },
+   {
+    "sender": "IDM(MNO B)",
+    "receiver": "ACN Agent(MNO B)",
+    "action": "Agent profile of RobotArm",
+    "type": "normal",
+    "content": {
+      "protocol": "HTTP/3.0",
+      "header": {
+         ":method": "POST",
+        ":scheme": "https",
+        ":authority": "acn-agent.mnoB.com",
+        ":path": "/v1/identity-management/agent/profile",
+        "content-type": "application/json"
+      },
+      "content": {
+        "did_document": {
+          "id": "did:3gpp:OT12MnyKcv@mnoB.com",
+          "controller": "did:3gpp:OT12MnyKcv@mnoB.com",
+          "verificationMethod": [
+            {
+              "id": "AgentID#key1",
+              "type": "JsonWebKey",
+              "controller": "did:3gpp:OT12MnyKcv@mnoB.com",
+              "publicKeyJwk": {
+                "crv": "Ed25519",
+                "x": "VCpo2LMLhn6iWku8MKvSLg2ZAoC-nlOyPVQaO3FxVeQ",
+                "kty": "OKP",
+                "kid": "_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A"
+              }
+            }
+          ],
+          "authentication": ["AgentID#key1"]
+        },
+        "verifiableCredentials": [
+          {
+            "@context": ["https://www.w3.org/2018/credentials/v1", "3gpp TS 33.xxx V20.0.0"],
+            "id": "MNOB/credentials/3732",
+            "type": ["VerifiableCredential", "BindingSIMCredential"],
+            "issuer": "did:udid:NewTypeOperator.rid678@6gc.mnc015.mcc234.3gppnetwork",
+            "validFrom": "2025-03-02T19:23:24Z",
+            "validUntil": "2026-03-02T19:23:24Z",
+            "credentialSubject": {
+              "agentName": "RobotArm",
+              "agentID": "did:3gpp:OT12MnyKcv@mnoB.com",
+              "masterID": "did:3gpp:OT12MnyKcv@mnoB.com"
+            },
+            "proof": {
+              "type": "Ed25519Signature2018",
+              "creator": "did:NewTypeOperator.rid678@6gc.mnc015.mcc234.3gppnetwork#keys-1",
+              "signatureValue": "uill9900"
+            }
+          }
+        ]
+      }
+    }
+  },
+     {
+    "sender": "ACN Agent(MNO B)",
+    "receiver": "RobotArm(MNO B)",
+    "action": "Agent profile of RobotArm",
+    "type": "normal",
+    "content": {
+      "protocol": "NAS",
+      "header": {
+      "EPD": "(14)New Nas Message",
+      "SecurityHeaderType": "Security header type with a spare half octet",
+      "MessageType": "Agentic Message",
+      "SdfGuti": "460060000411DDF82D9",
+      "NewNasSessionID": "df7a82b1-6234-4a12",
+      "PayloadContainerType": "(0)SessionService",
+      "PayloadContainer": "0x7B226964223A223231222C226D6574686F64223A226D6573736167652F73656E64222C..."
+      },
+      "content": {
+        "did_document": {
+          "id": "did:3gpp:OT12MnyKcv@mnoB.com",
+          "controller": "did:3gpp:OT12MnyKcv@mnoB.com",
+          "verificationMethod": [
+            {
+              "id": "AgentID#key1",
+              "type": "JsonWebKey",
+              "controller": "did:udid:NewType.rid678.schid0.userid30001@6gc.mnc015.mcc234.3gppnetwork",
+              "publicKeyJwk": {
+                "crv": "Ed25519",
+                "x": "VCpo2LMLhn6iWku8MKvSLg2ZAoC-nlOyPVQaO3FxVeQ",
+                "kty": "OKP",
+                "kid": "_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A"
+              }
+            }
+          ],
+          "authentication": ["AgentID#key1"]
+        },
+        "verifiableCredentials": [
+          {
+            "@context": ["https://www.w3.org/2018/credentials/v1", "3gpp TS 33.xxx V20.0.0"],
+            "id": "MNOB/credentials/3732",
+            "type": ["VerifiableCredential", "BindingSIMCredential"],
+            "issuer": "did:udid:NewTypeOperator.rid678@6gc.mnc015.mcc234.3gppnetwork",
+            "validFrom": "2025-03-02T19:23:24Z",
+            "validUntil": "2026-03-02T19:23:24Z",
+            "credentialSubject": {
+              "agentName": "RobotArm",
+              "agentID": "did:3gpp:OT12MnyKcv@mnoB.com",
+              "masterID": "did:3gpp:OT12MnyKcv@mnoB.com"
+            },
+            "proof": {
+              "type": "Ed25519Signature2018",
+              "creator": "did:udid:NewTypeOperator.rid678@6gc.mnc015.mcc234.3gppnetwork#keys-1",
+              "signatureValue": "uill9900"
+            }
+          }
+        ]
+      }
+    }
+  },
+    {
+      "sender": "RobotArm(MNO B)",
+      "receiver": "ACN Agent(MNO B)",
+      "action": "Register agent card(capability attribute VCs)",
+      "type": "normal",
+      "content": {
+        "protocol": "NAS",
+        "header": {
+          "protocol": "NAS",
+          "header": {
+            "EPD": "(14)New Nas Message",
+            "SecurityHeaderType": "Security header type with a spare half octet",
+            "MessageType": "Agentic Message",
+            "SdfGuti": "460060000411DDF82D9",
+            "NewNasSessionID": "df7a82b1-6234-4a12",
+            "PayloadContainerType": "(0)SessionService",
+            "PayloadContainer": "0x7B226964223A223231222C226D6574686F64223A226D6573736167652F73656E64222C..."
+          },
+          "content": {
+            "AgentID": "did:3gpp:OT12MnyKcv@mnoB.com",
+            "VC": {
+              "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                "3gpp TS 33.xxx V20.0.0"
+              ],
+              "id": "RobotFactory/credentials/3737",
+              "type": [
+                "VerifiableCredential",
+                "AttributeCredential"
+              ],
+              "issuer": "did:udid:3asFTTN12dB@RobotFactory.com",
+              "validFrom": "2020-01-01T19:23:24Z",
+              "validUntil": "2021-01-01T19:23:24Z",
+              "credentialSubject": {
+                "agentID": "did:udid:NewType.rid678.schid0.userid30001@6gc.mnc015.mcc234.3gppnetwork",
+                "agentAttribute": "Arm,  Payload: 10KG",
+                "authorizationMode": "Mode2"
+              },
+              "proof": {
+                "type": "Ed25519Signature2018",
+                "creator": "did:udid:3asFTTN12dB@RobotFactory.com#keys-1",
+                "signatureValue": "xsdwe22"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+    "sender": "ACN Agent(MNO B)",
+    "receiver": "ARDF(MNO B)",
+    "action": "Register agent card(capability attribute VCs)",
+    "type": "normal",
+    "content": {
+    }
+  },
+  {
+    "sender": "ARDF(MNO B)",
+    "receiver": "IDM(MNO B)",
+    "action": "Check capability attribute VCs",
+    "type": "normal",
+    "content": {
+    }
+  },
+  {
+    "sender": "IDM(MNO B)",
+    "receiver": "ARDF(MNO B)",
+    "action": "ok",
+    "type": "normal",
+    "content": {
+    }
+  },
+  {
+    "sender": "ARDF(MNO B)",
+    "receiver": "ACN Agent(MNO B)",
+    "action": "Registration successful",
+    "type": "normal",
+    "content": {
+    }
+  },
+  {
+    "sender": "ACN Agent(MNO B)",
+    "receiver": "RobotArm(MNO B)",
+    "action": "Registration successful",
+    "type": "normal",
+    "content": {
+    }
+  }
+]
+}
