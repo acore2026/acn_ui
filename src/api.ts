@@ -1,3 +1,5 @@
+import { buildBackendUrl } from './config';
+
 export interface StorySummary {
   scenario: string;
   flowId: string;
@@ -138,21 +140,21 @@ const fetchJSON = async <T>(url: string, options?: RequestInit): Promise<T> => {
 };
 
 export const api = {
-  getSidecarStatus: () => fetchJSON<SidecarStatus>('/api/sidecar/status'),
-  getSidecarTrace: () => fetchJSON<TraceEntry[]>('/api/sidecar/trace'),
-  getUPFStatus: () => fetchJSON<UPFStatus>('/api/upf/debug/adaptive-qos/status'),
-  getUPFTrace: () => fetchJSON<TraceEntry[]>('/api/upf/debug/adaptive-qos/trace'),
-  getFlowDetail: (flowId: string) => fetchJSON<FlowDetail>(`/api/sidecar/flows/${encodeURIComponent(flowId)}`),
-  startStory1: (body: Story1StartRequest = {}) => fetchJSON<any>('/api/sidecar/demo/story1/start', {
+  getSidecarStatus: () => fetchJSON<SidecarStatus>(buildBackendUrl('/api/sidecar/status')),
+  getSidecarTrace: () => fetchJSON<TraceEntry[]>(buildBackendUrl('/api/sidecar/trace')),
+  getUPFStatus: () => fetchJSON<UPFStatus>(buildBackendUrl('/api/upf/debug/adaptive-qos/status')),
+  getUPFTrace: () => fetchJSON<TraceEntry[]>(buildBackendUrl('/api/upf/debug/adaptive-qos/trace')),
+  getFlowDetail: (flowId: string) => fetchJSON<FlowDetail>(buildBackendUrl(`/api/sidecar/flows/${encodeURIComponent(flowId)}`)),
+  startStory1: (body: Story1StartRequest = {}) => fetchJSON<any>(buildBackendUrl('/api/sidecar/demo/story1/start'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }),
-  reset: () => fetchJSON<any>('/api/reset', {
+  reset: () => fetchJSON<any>(buildBackendUrl('/api/reset'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   }),
-  injectBurst: (ueAddress: string, flowId: string) => fetchJSON<any>('/api/upf/debug/adaptive-qos/inject-burst', {
+  injectBurst: (ueAddress: string, flowId: string) => fetchJSON<any>(buildBackendUrl('/api/upf/debug/adaptive-qos/inject-burst'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ueAddress, flowId }),

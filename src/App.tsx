@@ -8,6 +8,13 @@ import { Background, BaseEdge, Handle, Position, ReactFlow, ReactFlowProvider, g
 import { load as loadYaml } from 'js-yaml';
 import '@xyflow/react/dist/style.css';
 import { cn } from './utils';
+import {
+  BACKEND_ENDPOINT_STORAGE_KEY,
+  buildBackendUrl,
+  getInitialBackendEndpointDraft,
+  getRuntimeBackendEndpoint,
+  normalizeBackendEndpoint,
+} from './config';
 import state0Raw from '../scenarios/state_0.json?raw';
 import state1Raw from '../scenarios/state_1.json?raw';
 import state2Raw from '../scenarios/state_2.json?raw';
@@ -170,7 +177,6 @@ const ACTION_DELAY_MS = 5000;
 const CHECKLIST_PROCESSING_DELAY_MS = 2000;
 const CHECKLIST_SETTLE_DELAY_MS = 1000;
 const BACKEND_STATUS_POLL_MS = 500;
-const BACKEND_ENDPOINT_STORAGE_KEY = 'acn.demo.backendEndpoint';
 const DEFAULT_VIEWPORT: Viewport = { x: 27, y: 32, zoom: 1.16 };
 const SCENARIO_RAW_BY_ID = {
   state_0: state0Raw,
@@ -201,22 +207,6 @@ const STAGE_SCENARIO_MAP: Record<number, string[]> = {
   2: ['state_5'],
   3: ['state_6', 'state_8'],
 };
-
-function getDefaultBackendEndpoint() {
-  if (typeof window === 'undefined') {
-    return 'http://127.0.0.1:18081';
-  }
-  return `${window.location.protocol}//${window.location.hostname}:18081`;
-}
-
-function normalizeBackendEndpoint(raw: string) {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return '';
-  }
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-  return withProtocol.replace(/\/+$/, '');
-}
 
 function isDebugPresentationUrl() {
   if (typeof window === 'undefined') {
@@ -1910,18 +1900,8 @@ function Dashboard() {
   const [transitioningEdgeIds, setTransitioningEdgeIds] = useState<string[]>([]);
   const [transitioningBubbles, setTransitioningBubbles] = useState<Record<string, RetainedBubble>>({});
   const [transitioningPlans, setTransitioningPlans] = useState<Record<string, RetainedPlan>>({});
-  const [backendEndpointDraft, setBackendEndpointDraft] = useState(() => {
-    if (typeof window === 'undefined') {
-      return getDefaultBackendEndpoint();
-    }
-    return window.localStorage.getItem(BACKEND_ENDPOINT_STORAGE_KEY) ?? getDefaultBackendEndpoint();
-  });
-  const [backendEndpoint, setBackendEndpoint] = useState(() => {
-    if (typeof window === 'undefined') {
-      return getDefaultBackendEndpoint();
-    }
-    return normalizeBackendEndpoint(window.localStorage.getItem(BACKEND_ENDPOINT_STORAGE_KEY) ?? getDefaultBackendEndpoint());
-  });
+  const [backendEndpointDraft, setBackendEndpointDraft] = useState(() => getInitialBackendEndpointDraft());
+  const [backendEndpoint, setBackendEndpoint] = useState(() => normalizeBackendEndpoint(getInitialBackendEndpointDraft()));
   const [backendStage, setBackendStage] = useState(0);
   const [backendError, setBackendError] = useState<string | null>(null);
   const [backendConnected, setBackendConnected] = useState(false);
@@ -2084,9 +2064,9 @@ function Dashboard() {
   const persistBackendEndpoint = useCallback((nextValue: string) => {
     const normalized = normalizeBackendEndpoint(nextValue);
     setBackendEndpointDraft(nextValue);
-    setBackendEndpoint(normalized);
+    setBackendEndpoint(normalized || getRuntimeBackendEndpoint());
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(BACKEND_ENDPOINT_STORAGE_KEY, normalized || getDefaultBackendEndpoint());
+      window.localStorage.setItem(BACKEND_ENDPOINT_STORAGE_KEY, normalized || getRuntimeBackendEndpoint());
     }
     setBackendError(null);
     setBackendConnected(false);
@@ -2192,7 +2172,7 @@ function Dashboard() {
     }
     pollInFlightRef.current = true;
     try {
-      const response = await fetch(`${backendEndpoint}/status`, {
+      const response = await fetch(buildBackendUrl('/status'), {
         method: 'GET',
         cache: 'no-store',
       });
@@ -2226,7 +2206,7 @@ function Dashboard() {
     }
     setBackendResetPending(true);
     try {
-      const response = await fetch(`${backendEndpoint}/reset`, {
+      const response = await fetch(buildBackendUrl('/reset'), {
         method: 'POST',
       });
       if (!response.ok) {
