@@ -56,6 +56,9 @@ type DemoNodeData = {
   messageIcon?: BubbleIcon;
   messageState?: 'processing' | 'done';
   messageLeaving?: boolean;
+  captionLabel?: string;
+  caption?: string;
+  captionLeaving?: boolean;
   embeddedCard?: {
     visible: boolean;
     chips: string[];
@@ -183,10 +186,12 @@ type PlaybackFrame = {
   bubbles: Record<string, string>;
   bubbleStates: Record<string, 'processing' | 'done'>;
   bubbleIcons: Record<string, BubbleIcon | undefined>;
+  graphCaption?: { nodeId: string; title: string };
   planBubble?: { nodeId: string; title: string; items: Array<{ id: string; label: string; phase: 'pending' | 'processing' | 'done'; bubbleText: string }> };
   checklistItems: Array<{ id: string; label: string; phase: 'pending' | 'processing' | 'done' }>;
 };
 type RetainedBubble = { text: string; state: 'processing' | 'done'; icon?: BubbleIcon };
+type RetainedGraphCaption = NonNullable<PlaybackFrame['graphCaption']>;
 type RetainedPlan = NonNullable<PlaybackFrame['planBubble']>;
 type BackendStatus = { stage: number };
 
@@ -194,12 +199,17 @@ const ACTION_DELAY_MS = 5000;
 const CHECKLIST_PROCESSING_DELAY_MS = 2000;
 const CHECKLIST_SETTLE_DELAY_MS = 1000;
 const BACKEND_STATUS_POLL_MS = 500;
-const DEFAULT_VIEWPORT: Viewport = { x: 27, y: 32, zoom: 1.16 };
+const DEFAULT_VIEWPORT: Viewport = { x: -22, y: 42, zoom: 1.24 };
 const GRAPH_FONT_SCALE_STORAGE_KEY = 'acn-ui-graph-font-scale';
+const CANVAS_VIEWPORT_STORAGE_KEY = 'acn-ui-canvas-viewport';
+const SIDEBAR_WIDTH_STORAGE_KEY = 'acn-ui-sidebar-width';
+const DEFAULT_SIDEBAR_WIDTH = 487;
+const MIN_SIDEBAR_WIDTH = 320;
+const MAX_SIDEBAR_WIDTH = 560;
 const DEFAULT_GRAPH_FONT_SCALE = 1.2;
 const MIN_GRAPH_FONT_SCALE = 0.9;
 const MAX_GRAPH_FONT_SCALE = 1.6;
-const GRAPH_ZOOM_STEP = 1.06;
+const GRAPH_ZOOM_STEP = 1.03;
 const MIN_GRAPH_ZOOM = 0.5;
 const MAX_GRAPH_ZOOM = 2;
 const SCENARIO_RAW_BY_ID = {
@@ -256,6 +266,10 @@ const CATALOG_KEY_ALIASES: Record<string, string> = {
   hideScript: 'ui.settings.hideScript',
   graphTextSize: 'ui.settings.graphTextSize',
   graphTextScaleValue: 'ui.settings.graphTextScaleValue',
+  canvasView: 'ui.settings.canvasView',
+  zoomIn: 'ui.settings.zoomIn',
+  zoomOut: 'ui.settings.zoomOut',
+  resetView: 'ui.settings.resetView',
   reset: 'ui.controls.reset',
   pause: 'ui.controls.pause',
   continue: 'ui.controls.continue',
@@ -327,6 +341,44 @@ function getInitialGraphFontScale() {
     return DEFAULT_GRAPH_FONT_SCALE;
   }
   return Math.min(MAX_GRAPH_FONT_SCALE, Math.max(MIN_GRAPH_FONT_SCALE, raw));
+}
+
+function getInitialCanvasViewport(): Viewport {
+  if (typeof window === 'undefined') {
+    return DEFAULT_VIEWPORT;
+  }
+  try {
+    const raw = window.localStorage.getItem(CANVAS_VIEWPORT_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_VIEWPORT;
+    }
+    const parsed = JSON.parse(raw) as Partial<Viewport>;
+    if (
+      typeof parsed.x !== 'number'
+      || typeof parsed.y !== 'number'
+      || typeof parsed.zoom !== 'number'
+    ) {
+      return DEFAULT_VIEWPORT;
+    }
+    return {
+      x: parsed.x,
+      y: parsed.y,
+      zoom: Math.min(MAX_GRAPH_ZOOM, Math.max(MIN_GRAPH_ZOOM, parsed.zoom)),
+    };
+  } catch {
+    return DEFAULT_VIEWPORT;
+  }
+}
+
+function getInitialSidebarWidth() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_SIDEBAR_WIDTH;
+  }
+  const raw = Number.parseFloat(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY) ?? '');
+  if (!Number.isFinite(raw)) {
+    return DEFAULT_SIDEBAR_WIDTH;
+  }
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, raw));
 }
 
 function parseScenarioDoc(raw: string): ScenarioDoc {
@@ -1467,6 +1519,19 @@ function deriveVisibleNodeIds(script: DemoScript, revealedNodeIds: string[]) {
   return [...visible];
 }
 
+function getActionCaptionNode(
+  action: FlatAction,
+  effectiveChecklistPhase?: PlaybackFrame['checklistPhase'],
+) {
+  if (action.checklistTitle) {
+    if (effectiveChecklistPhase === 'processing' || effectiveChecklistPhase === 'finished') {
+      return getChecklistTargetNode(action);
+    }
+    return undefined;
+  }
+  return action.path?.[0] ?? action.nodes?.[0] ?? action.bubbles?.[0]?.node;
+}
+
 function createStandbyFrame(script: DemoScript): PlaybackFrame {
     return {
       phase: 'standby',
@@ -1482,6 +1547,7 @@ function createStandbyFrame(script: DemoScript): PlaybackFrame {
       bubbles: {},
       bubbleStates: {},
       bubbleIcons: {},
+      graphCaption: undefined,
       planBubble: undefined,
       checklistItems: [],
     };
@@ -1519,6 +1585,7 @@ function createIdleFrame(
     bubbles: {},
     bubbleStates: {},
     bubbleIcons: {},
+    graphCaption: undefined,
     planBubble: undefined,
     checklistItems,
   };
@@ -1549,6 +1616,7 @@ function buildPlaybackFrame(
       bubbles: {},
       bubbleStates: {},
       bubbleIcons: {},
+      graphCaption: undefined,
       planBubble: undefined,
       checklistItems: [],
     };
@@ -1593,6 +1661,7 @@ function buildPlaybackFrame(
       bubbles: {},
       bubbleStates: {},
       bubbleIcons: {},
+      graphCaption: undefined,
       planBubble: undefined,
       checklistItems,
     };
@@ -1615,6 +1684,8 @@ function buildPlaybackFrame(
   const checklistBubbleText = action.checklistTitle ? action.checklistBubbleText : undefined;
   const checklistCompleted = action.checklistTitle && effectiveChecklistPhase === 'checklist-finished';
   const stepLabel = getActionDisplayLabel(action, locale);
+  const stepCaptionTitle = resolveCopy(action.presentation?.title, locale, stepLabel);
+  const captionNodeId = getActionCaptionNode(action, effectiveChecklistPhase);
   const stepProcessingText = resolveCopy(action.bubbleText?.processing, locale) || resolveCopy(action.bubbleText?.plan, locale) || stepLabel;
   const stepDoneText = resolveCopy(action.bubbleText?.done, locale) || resolveCopy(action.bubbleText?.processing, locale) || resolveCopy(action.bubbleText?.plan, locale) || stepLabel;
   const bubbles = action.checklistTitle
@@ -1691,6 +1762,10 @@ function buildPlaybackFrame(
     bubbles,
     bubbleStates,
     bubbleIcons,
+    graphCaption: captionNodeId && stepCaptionTitle ? {
+      nodeId: captionNodeId,
+      title: stepCaptionTitle,
+    } : undefined,
     planBubble: action.checklistTitle && !checklistCompleted ? {
       nodeId: checklistOriginNode ?? action.id,
       title: resolveCopy(action.checklistTitle, locale),
@@ -2162,6 +2237,7 @@ function Dashboard() {
   const [transitioningNodeIds, setTransitioningNodeIds] = useState<string[]>([]);
   const [transitioningEdgeIds, setTransitioningEdgeIds] = useState<string[]>([]);
   const [transitioningBubbles, setTransitioningBubbles] = useState<Record<string, RetainedBubble>>({});
+  const [transitioningCaptions, setTransitioningCaptions] = useState<Record<string, RetainedGraphCaption>>({});
   const [transitioningPlans, setTransitioningPlans] = useState<Record<string, RetainedPlan>>({});
   const [backendEndpointDraft, setBackendEndpointDraft] = useState(() => getInitialBackendEndpointDraft());
   const [backendEndpoint, setBackendEndpoint] = useState(() => normalizeBackendEndpoint(getInitialBackendEndpointDraft()));
@@ -2170,12 +2246,13 @@ function Dashboard() {
   const [backendConnected, setBackendConnected] = useState(false);
   const [backendResetPending, setBackendResetPending] = useState(false);
   const [lastBackendPollAt, setLastBackendPollAt] = useState<number | null>(null);
-  const [canvasViewport, setCanvasViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
+  const [canvasViewport, setCanvasViewport] = useState<Viewport>(() => getInitialCanvasViewport());
   const [graphFontScale, setGraphFontScale] = useState(() => getInitialGraphFontScale());
   const [backendEnabled, setBackendEnabled] = useState(() => !initialDebugMode);
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<PresentationMessage | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => getInitialSidebarWidth());
   const [expandedNarrativeStageId, setExpandedNarrativeStageId] = useState<string | null>(null);
   const scriptRef = useRef(scriptDoc);
   const playbackRef = useRef(playback);
@@ -2188,11 +2265,13 @@ function Dashboard() {
     nodeIds: string[];
     edgeIds: string[];
     bubbles: Record<string, RetainedBubble>;
+    graphCaption?: RetainedGraphCaption;
     planBubble?: RetainedPlan;
-  }>({ nodeIds: [], edgeIds: [], bubbles: {}, planBubble: undefined });
+  }>({ nodeIds: [], edgeIds: [], bubbles: {}, graphCaption: undefined, planBubble: undefined });
   const transitionTimerRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+  const sidebarResizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
 
   useEffect(() => {
     scriptRef.current = scriptDoc;
@@ -2238,6 +2317,46 @@ function Dashboard() {
       window.localStorage.setItem(GRAPH_FONT_SCALE_STORAGE_KEY, String(graphFontScale));
     }
   }, [graphFontScale]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CANVAS_VIEWPORT_STORAGE_KEY, JSON.stringify(canvasViewport));
+    }
+  }, [canvasViewport]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+    }
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = sidebarResizeStartRef.current;
+      if (!start) {
+        return;
+      }
+      const nextWidth = start.width + (start.pointerX - event.clientX);
+      setSidebarWidth(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth)));
+    };
+
+    const handlePointerUp = () => {
+      if (!sidebarResizeStartRef.current) {
+        return;
+      }
+      sidebarResizeStartRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, []);
 
   useEffect(() => {
     if (!settingsOpen) {
@@ -2296,6 +2415,7 @@ function Dashboard() {
     const nextBubbles = Object.fromEntries(
       Object.entries(playback.bubbles).map(([nodeId, text]) => [nodeId, { text, state: playback.bubbleStates[nodeId] ?? 'processing', icon: playback.bubbleIcons[nodeId] }]),
     ) as Record<string, RetainedBubble>;
+    const nextCaption = playback.graphCaption;
     const nextPlan = playback.planBubble;
     const leavingNodeIds = previous.nodeIds.filter((id) => !nextNodeIds.includes(id));
     const leavingEdgeIds = previous.edgeIds.filter((id) => !nextEdgeIds.includes(id));
@@ -2305,6 +2425,13 @@ function Dashboard() {
         return !nextBubble || nextBubble.text !== bubble.text || nextBubble.state !== bubble.state;
       }),
     ) as Record<string, RetainedBubble>;
+    const leavingCaption = previous.graphCaption && (
+      !nextCaption
+      || nextCaption.nodeId !== previous.graphCaption.nodeId
+      || nextCaption.title !== previous.graphCaption.title
+    )
+      ? previous.graphCaption
+      : undefined;
     const leavingPlan = previous.planBubble && (
       !nextPlan
       || nextPlan.nodeId !== previous.planBubble.nodeId
@@ -2313,17 +2440,19 @@ function Dashboard() {
     )
       ? previous.planBubble
       : undefined;
-    transitionRef.current = { nodeIds: nextNodeIds, edgeIds: nextEdgeIds, bubbles: nextBubbles, planBubble: nextPlan };
+    transitionRef.current = { nodeIds: nextNodeIds, edgeIds: nextEdgeIds, bubbles: nextBubbles, graphCaption: nextCaption, planBubble: nextPlan };
     clearTransitionTimer();
-    if (leavingNodeIds.length || leavingEdgeIds.length || Object.keys(leavingBubbles).length || leavingPlan) {
+    if (leavingNodeIds.length || leavingEdgeIds.length || Object.keys(leavingBubbles).length || leavingCaption || leavingPlan) {
       setTransitioningNodeIds(leavingNodeIds);
       setTransitioningEdgeIds(leavingEdgeIds);
       setTransitioningBubbles(leavingBubbles);
+      setTransitioningCaptions(leavingCaption ? { [leavingCaption.nodeId]: leavingCaption } : {});
       setTransitioningPlans(leavingPlan ? { [leavingPlan.nodeId]: leavingPlan } : {});
       transitionTimerRef.current = window.setTimeout(() => {
         setTransitioningNodeIds([]);
         setTransitioningEdgeIds([]);
         setTransitioningBubbles({});
+        setTransitioningCaptions({});
         setTransitioningPlans({});
         transitionTimerRef.current = null;
       }, 260);
@@ -2331,9 +2460,10 @@ function Dashboard() {
       setTransitioningNodeIds([]);
       setTransitioningEdgeIds([]);
       setTransitioningBubbles({});
+      setTransitioningCaptions({});
       setTransitioningPlans({});
     }
-  }, [clearTransitionTimer, playback.activeEdgeIds, playback.activeNodeIds, playback.bubbles, playback.bubbleStates, playback.planBubble]);
+  }, [clearTransitionTimer, playback.activeEdgeIds, playback.activeNodeIds, playback.bubbles, playback.bubbleStates, playback.graphCaption, playback.planBubble]);
 
   const applyScriptText = useCallback((nextText: string) => {
     setScriptText(nextText);
@@ -2388,6 +2518,29 @@ function Dashboard() {
       Math.min(MAX_GRAPH_ZOOM, Math.max(MIN_GRAPH_ZOOM, nextZoom)),
       { duration: 60 },
     );
+  }, []);
+
+  const startSidebarResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (sidebarCollapsed) {
+      return;
+    }
+    sidebarResizeStartRef.current = { pointerX: event.clientX, width: sidebarWidth };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarCollapsed, sidebarWidth]);
+
+  const resetViewState = useCallback(() => {
+    setSidebarCollapsed(false);
+    setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+    setCanvasViewport(DEFAULT_VIEWPORT);
+    const instance = reactFlowRef.current;
+    if (instance) {
+      void instance.setViewport(DEFAULT_VIEWPORT, { duration: 160 });
+    }
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(CANVAS_VIEWPORT_STORAGE_KEY);
+      window.localStorage.removeItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    }
   }, []);
 
   const updatePlayback = useCallback((mode: 'start' | 'continue' | 'timer' | 'pause' | 'reset' | 'next-step' | 'previous-step') => {
@@ -2545,13 +2698,13 @@ function Dashboard() {
   }, [backendEnabled, backendEndpoint, backendResetPending, updatePlayback]);
 
   useEffect(() => {
-    const graph = buildGraph(scriptDoc, playback, locale, transitioningNodeIds, transitioningEdgeIds, transitioningBubbles, transitioningPlans);
+    const graph = buildGraph(scriptDoc, playback, locale, transitioningNodeIds, transitioningEdgeIds, transitioningBubbles, transitioningCaptions, transitioningPlans);
     setNodes((prev) => graph.nodes.map((node) => {
       const previous = prev.find((candidate) => candidate.id === node.id);
       return previous ? { ...node, position: previous.position } : node;
     }));
     setEdges(graph.edges);
-  }, [locale, playback, scriptDoc, transitioningBubbles, transitioningEdgeIds, transitioningNodeIds, transitioningPlans]);
+  }, [locale, playback, scriptDoc, transitioningBubbles, transitioningCaptions, transitioningEdgeIds, transitioningNodeIds, transitioningPlans]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -2637,7 +2790,7 @@ function Dashboard() {
   }, [locale, scriptDoc]);
 
   const savedBackendDisplay = backendEndpoint || t(locale, 'notConfigured');
-  const viewportDisplay = `x ${Math.round(canvasViewport.x)}, y ${Math.round(canvasViewport.y)}, z ${canvasViewport.zoom.toFixed(2)}`;
+  const viewportDisplay = `x ${Math.round(canvasViewport.x)}, y ${Math.round(canvasViewport.y)}, z ${canvasViewport.zoom.toFixed(2)}, panel ${Math.round(sidebarWidth)}px`;
   const graphFontScalePercent = Math.round(graphFontScale * 100);
   const graphFontScaleDisplay = t(locale, 'graphTextScaleValue').replace('{percent}', String(graphFontScalePercent));
   const playbackControlTitle = playback.phase === 'running'
@@ -2706,12 +2859,6 @@ function Dashboard() {
             </div>
           )}
           <div className="control-group">
-            <button className="icon-button" onClick={() => adjustZoom(-1)} title="Zoom out">
-              <Minus size={16} />
-            </button>
-            <button className="icon-button" onClick={() => adjustZoom(1)} title="Zoom in">
-              <Plus size={16} />
-            </button>
             <div className="settings-popout-anchor" ref={settingsPopoutRef}>
               <button className="icon-button" onClick={() => setSettingsOpen((open) => !open)} title={t(locale, 'settings')} aria-expanded={settingsOpen}>
                 <Settings size={16} />
@@ -2755,6 +2902,20 @@ function Dashboard() {
                       <span className="settings-range-value">{graphFontScaleDisplay}</span>
                     </div>
                   </label>
+                  <div className="settings-field">
+                    <span className="settings-label">{t(locale, 'canvasView')}</span>
+                    <div className="settings-actions">
+                      <button className="settings-icon-button" onClick={() => adjustZoom(-1)} title={t(locale, 'zoomOut')}>
+                        <Minus size={14} />
+                      </button>
+                      <button className="settings-icon-button" onClick={() => adjustZoom(1)} title={t(locale, 'zoomIn')}>
+                        <Plus size={14} />
+                      </button>
+                      <button className="primary-button settings-button settings-button-secondary" onClick={resetViewState}>
+                        {t(locale, 'resetView')}
+                      </button>
+                    </div>
+                  </div>
                   <div className="settings-switch-stack">
                     <label className="settings-field settings-switch-field">
                       <span className="settings-label">{t(locale, 'debugMode')}</span>
@@ -2847,7 +3008,7 @@ function Dashboard() {
               setCanvasViewport(instance.getViewport());
             }}
             onMove={(_, viewport) => setCanvasViewport(viewport)}
-            defaultViewport={DEFAULT_VIEWPORT}
+            defaultViewport={canvasViewport}
             nodesConnectable={false}
             nodesDraggable={false}
             panOnDrag
@@ -2860,7 +3021,19 @@ function Dashboard() {
             <Background gap={40} size={1} color="#f1f5f9" />
           </ReactFlow>
         </section>
-        <div className={cn("sidebar-shell", sidebarCollapsed && "sidebar-shell-collapsed")}>
+        <div
+          className={cn("sidebar-shell", sidebarCollapsed && "sidebar-shell-collapsed")}
+          style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+        >
+          {!sidebarCollapsed && (
+            <div
+              className="sidebar-resize-handle"
+              onPointerDown={startSidebarResize}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize narrative panel"
+            />
+          )}
           <button
             type="button"
             className="sidebar-collapse-button"
@@ -2868,7 +3041,7 @@ function Dashboard() {
             title={sidebarCollapsed ? t(locale, 'expandNarrativeTray') : t(locale, 'collapseNarrativeTray')}
             aria-label={sidebarCollapsed ? t(locale, 'expandNarrativeTray') : t(locale, 'collapseNarrativeTray')}
           >
-            {sidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+            {sidebarCollapsed ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
           </button>
           <aside className="sidebar">
             <div className="presentation-panel">
@@ -3032,28 +3205,7 @@ function BubbleIconGlyph({ icon, state }: { icon?: BubbleIcon; state?: 'processi
 
 function DeviceIllustration({ appearance }: { appearance: DemoNodeData['appearance'] }) {
   if (appearance === 'phone') {
-    return (
-      <svg viewBox="0 0 120 196" className="device-art device-art-phone" aria-hidden="true">
-        <defs>
-          <linearGradient id="phone-shell" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#1f2937" />
-            <stop offset="100%" stopColor="#334155" />
-          </linearGradient>
-          <linearGradient id="phone-screen" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#020617" />
-            <stop offset="50%" stopColor="#0f172a" />
-            <stop offset="100%" stopColor="#082f49" />
-          </linearGradient>
-        </defs>
-        <rect x="24" y="8" width="72" height="180" rx="24" fill="url(#phone-shell)" />
-        <rect x="29" y="16" width="62" height="164" rx="17" fill="url(#phone-screen)" />
-        <rect x="48" y="22" width="24" height="6" rx="3" fill="#020617" fillOpacity="0.95" />
-        <circle cx="76" cy="25" r="2.4" fill="#0f172a" fillOpacity="0.95" />
-        <path d="M40 118c12-9 25-15 39-19" stroke="#7dd3fc" strokeWidth="4.5" strokeLinecap="round" strokeOpacity="0.34" />
-        <path d="M45 135c9-5 19-9 31-12" stroke="#c084fc" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.22" />
-        <rect x="52" y="182" width="16" height="2.5" rx="1.25" fill="#94a3b8" fillOpacity="0.42" />
-      </svg>
-    );
+    return <img src="/assets/phone.png" className="device-art device-art-phone" alt="" aria-hidden="true" />;
   }
 
   if (appearance === 'robot-arm') {
@@ -3095,92 +3247,7 @@ function DeviceIllustration({ appearance }: { appearance: DemoNodeData['appearan
     );
   }
 
-  return (
-    <svg viewBox="0 0 900 560" className="device-art device-art-dog" aria-hidden="true">
-      <defs>
-        <linearGradient id="dog-body" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#d9dde3" />
-          <stop offset="100%" stopColor="#aeb6c0" />
-        </linearGradient>
-        <linearGradient id="dog-leg" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#cfd5dc" />
-          <stop offset="100%" stopColor="#8f98a3" />
-        </linearGradient>
-        <linearGradient id="dog-dark" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#7d8792" />
-          <stop offset="100%" stopColor="#555e68" />
-        </linearGradient>
-      </defs>
-      <g transform="translate(35 20)">
-        <path
-          d="M230 110 C255 78, 315 58, 404 56 L585 54 C635 53, 682 76, 705 112 L725 146 C734 162, 734 185, 722 200 L698 230 C682 250, 657 262, 631 262 L290 262 C264 262, 239 250, 223 230 L202 204 C188 187, 187 160, 199 141 Z"
-          fill="url(#dog-body)"
-          stroke="#8d96a0"
-          strokeWidth="4"
-        />
-
-        <path
-          d="M303 75 C360 45, 553 43, 628 63 C649 69, 664 80, 672 97 L623 104 C550 93, 384 95, 302 113 C285 116, 273 112, 269 103 C266 94, 278 84, 303 75 Z"
-          fill="#e6eaee"
-          stroke="#b8c0c8"
-          strokeWidth="3"
-        />
-
-        <path
-          d="M171 122 C178 106, 196 94, 220 92 L272 89 C290 88, 303 102, 301 119 L293 196 C291 214, 276 227, 258 227 L206 227 C184 227, 167 210, 166 189 Z"
-          fill="url(#dog-body)"
-          stroke="#8d96a0"
-          strokeWidth="4"
-        />
-
-        <ellipse cx="687" cy="145" rx="46" ry="52" fill="url(#dog-body)" stroke="#8d96a0" strokeWidth="4" />
-        <ellipse cx="240" cy="143" rx="42" ry="48" fill="#bcc4cc" stroke="#8d96a0" strokeWidth="4" />
-        <ellipse cx="612" cy="148" rx="40" ry="48" fill="#bcc4cc" stroke="#8d96a0" strokeWidth="4" />
-
-        <rect x="173" y="143" width="50" height="70" rx="10" fill="#20252b" />
-        <circle cx="192" cy="165" r="8" fill="#7fb2ff" />
-        <circle cx="192" cy="191" r="8" fill="#7fb2ff" />
-        <rect x="206" y="155" width="11" height="46" rx="4" fill="#0f1317" />
-
-        <text x="218" y="157" fontFamily="Arial, Helvetica, sans-serif" fontSize="34" fontWeight="700" fill="#ffffff" opacity="0.88">02</text>
-        <rect x="470" y="170" width="28" height="40" rx="5" fill="#747e88" />
-        <rect x="507" y="170" width="12" height="40" rx="4" fill="#8b949d" />
-        <path d="M250 166 L275 162" stroke="#e7ebef" strokeWidth="5" strokeLinecap="round" />
-        <path d="M249 181 L278 174" stroke="#e7ebef" strokeWidth="5" strokeLinecap="round" />
-
-        <g>
-          <ellipse cx="235" cy="196" rx="35" ry="32" fill="url(#dog-body)" stroke="#8d96a0" strokeWidth="4" />
-          <path d="M226 215 C214 250, 210 278, 214 308 C218 344, 210 380, 186 452" fill="none" stroke="url(#dog-leg)" strokeWidth="28" strokeLinecap="round" />
-          <path d="M186 452 C178 476, 168 495, 155 515" fill="none" stroke="url(#dog-dark)" strokeWidth="20" strokeLinecap="round" />
-          <ellipse cx="152" cy="520" rx="18" ry="9" fill="#535c66" />
-        </g>
-
-        <g transform="translate(122 4)">
-          <ellipse cx="235" cy="196" rx="35" ry="32" fill="url(#dog-body)" stroke="#8d96a0" strokeWidth="4" />
-          <path d="M245 214 C263 242, 286 274, 312 306 C340 340, 364 386, 382 474" fill="none" stroke="url(#dog-leg)" strokeWidth="28" strokeLinecap="round" />
-          <path d="M382 474 C386 492, 392 506, 401 521" fill="none" stroke="url(#dog-dark)" strokeWidth="20" strokeLinecap="round" />
-          <ellipse cx="406" cy="526" rx="19" ry="9" fill="#535c66" />
-        </g>
-
-        <g transform="translate(348 -8)">
-          <ellipse cx="235" cy="196" rx="35" ry="32" fill="url(#dog-body)" stroke="#8d96a0" strokeWidth="4" />
-          <path d="M220 214 C202 252, 189 294, 182 336 C177 368, 173 407, 171 468" fill="none" stroke="url(#dog-leg)" strokeWidth="28" strokeLinecap="round" />
-          <path d="M171 468 C170 489, 167 506, 162 523" fill="none" stroke="url(#dog-dark)" strokeWidth="20" strokeLinecap="round" />
-          <ellipse cx="161" cy="527" rx="18" ry="9" fill="#535c66" />
-        </g>
-
-        <g transform="translate(478 -16)">
-          <ellipse cx="235" cy="196" rx="35" ry="32" fill="url(#dog-body)" stroke="#8d96a0" strokeWidth="4" />
-          <path d="M245 214 C267 241, 291 274, 309 315 C324 348, 334 388, 341 466" fill="none" stroke="url(#dog-leg)" strokeWidth="28" strokeLinecap="round" />
-          <path d="M341 466 C343 487, 348 506, 355 522" fill="none" stroke="url(#dog-dark)" strokeWidth="20" strokeLinecap="round" />
-          <ellipse cx="360" cy="527" rx="18" ry="9" fill="#535c66" />
-        </g>
-
-        <path d="M275 262 L626 262" stroke="#87919b" strokeWidth="5" strokeLinecap="round" opacity="0.7" />
-        <path d="M305 238 C390 248, 525 247, 609 236" fill="none" stroke="#eef2f5" strokeWidth="4" opacity="0.6" />
-      </g>
-    </svg>
-  );
+  return <img src="/assets/unitree-robotdog.png" className="device-art device-art-dog" alt="" aria-hidden="true" />;
 }
 
 function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
@@ -3214,6 +3281,12 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
       data.kind === 'robot' && data.message && "mission-node-robot-bubble",
       (data.message || data.plan) && "mission-node-with-bubble",
     )} style={{ '--node-tint': meta.tint } as any}>
+      {data.caption && (
+        <div className={cn("mission-node-caption", data.captionLeaving && "mission-node-caption-leaving")}>
+          <span className="mission-node-caption-kicker">{data.captionLabel}</span>
+          <span className="mission-node-caption-title">{data.caption}</span>
+        </div>
+      )}
       {data.plan && (
         <div className={cn("mission-node-plan", data.planLeaving && "mission-node-plan-leaving")}>
           <div className="mission-node-plan-header">
@@ -3489,16 +3562,16 @@ const LAYOUT = {
   bus: { x: 212, y: 216, width: 508, height: 24 },
   nodes: {
     idm: { x: 218, y: 116, width: 136 },
-    acnAgent: { x: 578, y: 116, width: 136 },
+    acnAgent: { x: 558, y: 116, width: 176 },
     srf: { x: 150, y: 288, width: 128 },
     scf: { x: 322, y: 288, width: 128 },
     up: { x: 482, y: 288, width: 128 },
     cmccGw: { x: 649, y: 288, width: 168 },
     ran: { x: 202, y: 572, width: 128 },
     phone: { x: 392, y: 520, width: 296, height: 136 },
-    robotDog: { x: 392, y: 678, width: 316, collapsedWidth: 156, height: 112 },
+    robotDog: { x: 392, y: 678, width: 344, collapsedWidth: 156, height: 112 },
     phoneAgentCard: { x: 578, y: 532, width: 174 },
-    agentCard: { x: 578, y: 592, width: 174 },
+    agentCard: { x: 578, y: 592, width: 220 },
     ottOrdering: { x: 1098.7776623098334, y: 93.77870152133133, width: 148 },
     ottGw: { x: 1000, y: 204, width: 168 },
     mnoGw: { x: 1000, y: 404, width: 168 },
@@ -3514,6 +3587,7 @@ function buildGraph(
   transitioningNodeIds: string[] = [],
   transitioningEdgeIds: string[] = [],
   transitioningBubbles: Record<string, RetainedBubble> = {},
+  transitioningCaptions: Record<string, RetainedGraphCaption> = {},
   transitioningPlans: Record<string, RetainedPlan> = {},
 ) {
   const visibleSet = new Set(playback.visibleNodeIds);
@@ -3547,6 +3621,10 @@ function buildGraph(
   const bubbleIconFor = (nodeId: string) => playback.bubbleIcons[nodeId] ?? transitioningBubbles[nodeId]?.icon;
   const bubbleStateFor = (nodeId: string) => playback.bubbleStates[nodeId] ?? transitioningBubbles[nodeId]?.state;
   const bubbleLeavingFor = (nodeId: string) => !playback.bubbles[nodeId] && Boolean(transitioningBubbles[nodeId]);
+  const captionFor = (nodeId: string) => (
+    playback.graphCaption?.nodeId === nodeId ? playback.graphCaption.title : transitioningCaptions[nodeId]?.title
+  );
+  const captionLeavingFor = (nodeId: string) => playback.graphCaption?.nodeId !== nodeId && Boolean(transitioningCaptions[nodeId]);
   const planFor = (nodeId: string) => (
     playback.planBubble?.nodeId === nodeId ? playback.planBubble : transitioningPlans[nodeId]
   );
@@ -3624,7 +3702,20 @@ function buildGraph(
 
 
   return { 
-    nodes, 
+    nodes: nodes.map((node) => (
+      node.type === 'mission'
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              nodeId: (node.data as DemoNodeData).nodeId ?? node.id,
+              captionLabel: t(locale, 'currentStep'),
+              caption: captionFor(node.id),
+              captionLeaving: captionLeavingFor(node.id),
+            },
+          }
+        : node
+    )), 
     edges: edges.map((edge) => ({
       ...edge,
       data: edge.data
