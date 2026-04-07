@@ -1634,24 +1634,24 @@ body {
 }
 
 .mission-node-acn-agent-shell .mission-node-bubble {
-  top: 50%;
-  right: auto;
-  left: calc(100% + 30px);
-  transform: translateY(-50%);
-  transform-origin: center left;
-  animation: bubble-in-side 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  top: -38px;
+  right: -22px;
+  left: auto;
+  transform: none;
+  transform-origin: bottom right;
+  animation: bubble-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mission-node-acn-agent-shell .mission-node-bubble::after {
-  top: 50%;
-  left: -6px;
-  right: auto;
-  bottom: auto;
-  border-right: 0;
-  border-bottom: 0;
-  border-left: 1px solid rgba(148, 163, 184, 0.28);
-  border-top: 1px solid rgba(148, 163, 184, 0.28);
-  transform: translateY(-50%) rotate(45deg);
+  top: auto;
+  left: auto;
+  right: 16px;
+  bottom: -6px;
+  border-left: 0;
+  border-top: 0;
+  border-right: 1px solid rgba(148, 163, 184, 0.28);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+  transform: rotate(45deg);
 }
 
 .mission-node-acn-agent-shell .mission-node-plan {
@@ -1681,7 +1681,7 @@ body {
 }
 
 .mission-node-acn-agent-shell .mission-node-bubble.mission-node-bubble-leaving {
-  animation: bubble-out-side 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: bubble-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .mission-node-plan-leaving {

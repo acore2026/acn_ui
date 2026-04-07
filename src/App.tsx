@@ -3813,8 +3813,9 @@ function buildGraph(
   const flashFor = (nodeId: string) => {
     const bubbleState = bubbleStateFor(nodeId);
     const hasActivePlan = Boolean(planFor(nodeId) && !planLeavingFor(nodeId));
-    const isProcessingBubble = bubbleState === 'processing';
-    return hasActivePlan || isProcessingBubble;
+    const hasActiveBubble = bubbleState === 'processing' || bubbleState === 'done';
+    const isGateHold = playback.phase === 'gate' && activeNodeSet.has(nodeId);
+    return hasActivePlan || hasActiveBubble || isGateHold;
   };
   const graphCardDetails = (...details: NonNullable<DemoNodeData['details']>) => details;
   const nodes: Node[] = [
