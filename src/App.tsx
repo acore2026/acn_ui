@@ -98,7 +98,6 @@ type NarrativeStageSummary = {
   id: string;
   summaryTitle: string;
   status: 'pending' | 'active' | 'done';
-  taskTitle: string;
   body?: string;
   items: Array<{ id: string; label: string; phase: 'pending' | 'processing' | 'done' }>;
 };
@@ -937,7 +936,7 @@ stages:
         kind: talk
         delayMs: 1000
         presentation:
-          title: "Robot dog session is now online"
+          title: "Bring the robot dog session online"
           body: |
             - **RobotDog** is now visible on the network.
             - The device is ready to begin onboarding.
@@ -952,7 +951,7 @@ stages:
         delayMs: 2200
         path: [phone, acn-agent]
         presentation:
-          title: "The family device requests onboarding"
+          title: "Analyse domain onboarding request"
           body: |
             - **AiCore** begins digital identity registration.
             - The onboarding flow also prepares the new family domain.
@@ -979,7 +978,7 @@ stages:
             kind: talk
             path: [acn-agent, idm]
             presentation:
-              title: "A digital identity is being issued"
+              title: "Issue a digital identity"
               body: |
                 - **Identity Management** assigns a trusted ID to **RobotDog**.
                 - The new agent identity is anchored and returned to the ACN flow.
@@ -1000,7 +999,7 @@ stages:
             kind: talk
             path: [acn-agent, agent-gw]
             presentation:
-              title: "The agent card is being published"
+              title: "Publish the new agent card"
               body: |
                 - The device identity is published as an **Agent Card**.
                 - The network can now discover and route traffic to **RobotDog**.
@@ -1016,7 +1015,7 @@ stages:
             kind: talk
             path: [acn-agent, up, scf]
             presentation:
-              title: "The family domain is being created"
+              title: "Create the family domain"
               body: |
                 - **User-plane** and **service** functions allocate the private domain environment.
                 - Access credentials and traffic policy are provisioned together.
@@ -1038,7 +1037,7 @@ stages:
         kind: talk
         path: [phone, ott-ordering]
         presentation:
-          title: "A new order is placed from the phone"
+          title: "Place a new order from the phone"
           body: |
             - The order request leaves the phone and crosses domains.
             - It arrives at the **Ordering Agent** in the application network.
@@ -1068,7 +1067,7 @@ stages:
             kind: talk
             path: [ott-ordering, mno-gw]
             presentation:
-              title: "A delivery agent is being discovered"
+              title: "Discover a delivery agent"
               body: |
                 - The ordering workflow searches across the partner domain.
                 - It filters for a suitable delivery robot.
@@ -1080,7 +1079,7 @@ stages:
             kind: talk
             path: [ott-ordering, mno-endpoint]
             presentation:
-              title: "The delivery task is being assigned"
+              title: "Assign the delivery task"
               body: |
                 - The selected robot receives the pickup mission.
                 - The courier prepares to act on the delivery task.
@@ -1099,7 +1098,7 @@ stages:
         kind: talk
         path: [ott-ordering, phone]
         presentation:
-          title: "The user is notified that dispatch succeeded"
+          title: "Notify the user that dispatch succeeded"
           body: |
             - The phone receives the **RobotArm** identity.
             - The order is now ready for pickup.
@@ -1117,7 +1116,7 @@ stages:
         kind: talk
         path: [mno-endpoint, robot-dog]
         presentation:
-          title: "The delivery robot shares its live location"
+          title: "Share the delivery robot's live location"
           body: |
             - The delivery robot shares its live location.
             - **RobotDog** receives the rendezvous coordinates for handoff.
@@ -1132,7 +1131,7 @@ stages:
         kind: talk
         path: [mno-endpoint, robot-dog]
         presentation:
-          title: "Both robots verify each other before handoff"
+          title: "Verify both robots before handoff"
           body: |
             - Both robots perform **peer digital identity** verification.
             - The delivery can proceed securely after the check succeeds.
@@ -1294,6 +1293,10 @@ function checklistDisplayId(id: string) {
   return id.replace(/^stage\d+-/, '');
 }
 
+function getActionDisplayLabel(action: FlatAction) {
+  return action.presentation?.title ?? action.stepLabel ?? checklistDisplayId(action.id);
+}
+
 function getChecklistOriginNode(action: FlatAction) {
   return action.path?.[0] ?? action.nodes?.[0] ?? action.id;
 }
@@ -1361,8 +1364,8 @@ function createIdleFrame(
   const nextStage = script.stages[stageIndex + 1];
   const checklistItems = stage ? flattenStage(stage).map((item) => ({
     id: item.id,
-    label: item.checklistTitle ? checklistDisplayId(item.id) : item.stepLabel,
-    phase: 'pending' as const,
+    label: getActionDisplayLabel(item),
+    phase: (phase === 'gate' || phase === 'complete') ? 'done' as const : 'pending' as const,
   })) : [];
 
   return {
@@ -1432,9 +1435,9 @@ function buildPlaybackFrame(
           : 'pending';
     return {
       id: item.id,
-    label: item.checklistTitle ? checklistDisplayId(item.id) : item.stepLabel,
-    phase,
-  };
+      label: getActionDisplayLabel(item),
+      phase,
+    };
   });
 
   if (!action) {
@@ -1541,8 +1544,8 @@ function buildPlaybackFrame(
     currentStepLabel: action.checklistTitle
       ? effectiveChecklistPhase === 'checklist-finished'
         ? `Checklist finished: ${action.checklistTitle}`
-        : `${effectiveChecklistPhase === 'finished' ? 'Finished' : 'Processing'}: ${action.stepLabel}`
-      : action.stepLabel,
+        : `${effectiveChecklistPhase === 'finished' ? 'Finished' : 'Processing'}: ${getActionDisplayLabel(action)}`
+      : getActionDisplayLabel(action),
     activeNodeIds,
     activeEdgeIds: action.checklistTitle && effectiveChecklistPhase === 'checklist-finished' ? [] : edgeIds,
     activeEdgeDirections: action.checklistTitle && effectiveChecklistPhase === 'checklist-finished' ? {} : activeEdgeDirections,
@@ -1563,13 +1566,13 @@ function buildPlaybackFrame(
               : 'pending';
         return {
           id: item.id,
-          label: item.bubbleText?.plan ?? checklistDisplayId(item.id),
+          label: getActionDisplayLabel(item),
           phase,
           bubbleText: phase === 'processing'
-            ? item.bubbleText?.processing ?? item.bubbleText?.plan ?? checklistDisplayId(item.id)
+            ? item.bubbleText?.processing ?? item.bubbleText?.plan ?? getActionDisplayLabel(item)
             : phase === 'done'
-              ? item.bubbleText?.done ?? item.bubbleText?.processing ?? item.bubbleText?.plan ?? checklistDisplayId(item.id)
-              : item.bubbleText?.plan ?? checklistDisplayId(item.id),
+              ? item.bubbleText?.done ?? item.bubbleText?.processing ?? item.bubbleText?.plan ?? getActionDisplayLabel(item)
+              : item.bubbleText?.plan ?? getActionDisplayLabel(item),
         };
       }),
     } : undefined,
@@ -1668,9 +1671,6 @@ function deriveNarrativeStageSummaries(
     }
 
     const fallbackSnapshot = getStageNarrativeSnapshot(script, index);
-    const title = index === playback.stageIndex && playback.phase !== 'standby'
-      ? presentationCard.title
-      : fallbackSnapshot.title;
     const body = index === playback.stageIndex && playback.phase !== 'standby'
       ? presentationCard.body
       : fallbackSnapshot.body;
@@ -1678,7 +1678,7 @@ function deriveNarrativeStageSummaries(
       ? playback.checklistItems
       : stageActions.map((action) => ({
           id: action.id,
-          label: action.checklistTitle ? checklistDisplayId(action.id) : action.stepLabel,
+          label: getActionDisplayLabel(action),
           phase: status === 'done' ? 'done' as const : 'pending' as const,
         }));
 
@@ -1686,7 +1686,6 @@ function deriveNarrativeStageSummaries(
       id: stage.id,
       summaryTitle: getFixedStageSummaryTitle(index),
       status,
-      taskTitle: title,
       body,
       items,
     };
@@ -2663,7 +2662,6 @@ function Dashboard() {
                         </span>
                         <div className="narrative-stage-copy">
                           <div className="narrative-stage-summary">{stage.summaryTitle}</div>
-                          <div className="narrative-stage-task-title">{stage.taskTitle}</div>
                         </div>
                       </button>
                       {expandedNarrativeStageId === stage.id ? (
@@ -2700,7 +2698,7 @@ function Dashboard() {
                                 <span className="step-queue-dot">•</span>
                                 <div className="step-queue-copy">
                                   <span className="step-queue-label">In Progress</span>
-                                  <span className="step-queue-value">{stage.taskTitle}</span>
+                                  <span className="step-queue-value">{stage.summaryTitle}</span>
                                   <div className="step-queue-description">{renderMessageBody(stage.body)}</div>
                                 </div>
                               </div>
