@@ -264,6 +264,8 @@ const CATALOG_KEY_ALIASES: Record<string, string> = {
   updated: 'ui.settings.updated',
   playtime: 'ui.settings.playtime',
   canvas: 'ui.settings.canvas',
+  controlPlane: 'ui.legend.controlPlane',
+  dataPlane: 'ui.legend.dataPlane',
   ignored: 'ui.settings.ignored',
   connected: 'ui.settings.connected',
   never: 'ui.settings.never',
@@ -1254,7 +1256,7 @@ stages:
                 icon: done
           - id: stage1-setup-family-domain
             kind: talk
-            path: [acn-agent, up, scf]
+            path: [acn-agent, scf, up]
             presentation:
               title: "{{script.stage1.familyDomain.title}}"
               body: "{{script.stage1.familyDomain.body}}"
@@ -1717,6 +1719,10 @@ function buildPlaybackFrame(
       return [edge.edgeId, direction];
     }),
   ) as Record<string, 'forward' | 'reverse'>;
+  if (action.id === 'stage1-setup-family-domain') {
+    activeEdgeDirections['e-bus-scf'] = 'forward';
+    activeEdgeDirections['e-bus-up'] = 'forward';
+  }
   const checklistOriginNode = action.checklistTitle ? getChecklistOriginNode(action) : undefined;
   const checklistTargetNode = action.checklistTitle ? getChecklistTargetNode(action) : undefined;
   const checklistBubbleText = action.checklistTitle ? action.checklistBubbleText : undefined;
@@ -3174,6 +3180,10 @@ function Dashboard() {
               <span className="canvas-caption-title">{canvasCaption.title}</span>
             </div>
           )}
+          <div className="canvas-legend" aria-label="Plane legend">
+            <span className="canvas-legend-pill canvas-legend-pill-control">{t(locale, 'controlPlane')}</span>
+            <span className="canvas-legend-pill canvas-legend-pill-data">{t(locale, 'dataPlane')}</span>
+          </div>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -3738,7 +3748,7 @@ function StatusBadge({ label, tone, icon }: any) {
 }
 
 const LAYOUT = {
-  ott: { x: 980, y: 84, width: 306, height: 212 },
+  ott: { x: 980, y: 84, width: 330, height: 212 },
   mno: { x: 980, y: 356, width: 424, height: 296 },
   core: { x: 36, y: 108, width: 860, height: 348 },
   access: { x: 36, y: 492, width: 760, height: 232 },
@@ -3755,11 +3765,11 @@ const LAYOUT = {
     robotDog: { x: 392, y: 678, width: 344, collapsedWidth: 156, height: 112 },
     phoneAgentCard: { x: 578, y: 532, width: 174 },
     agentCard: { x: 578, y: 592, width: 220 },
-    ottOrdering: { x: 1098.7776623098334, y: 112, width: 148 },
+    ottOrdering: { x: 1142, y: 112, width: 148 },
     ottGw: { x: 1000, y: 216, width: 168 },
     mnoGw: { x: 1000, y: 404, width: 168 },
-    mnoEndpoint: { x: 1096, y: 488, width: 304, height: 132 },
-    armAgentCard: { x: 1120, y: 612, width: 174 },
+    mnoEndpoint: { x: 1068, y: 500, width: 304, height: 132 },
+    armAgentCard: { x: 1102, y: 632, width: 174 },
   },
 } as const;
 
@@ -3797,7 +3807,7 @@ function buildGraph(
   })();
   const activeNodeSet = new Set(playback.activeNodeIds);
   const activeEdgeSet = new Set(playback.activeEdgeIds);
-  const phoneRanPlane: 'control' | 'data' = playback.stageIndex >= 2 ? 'data' : 'control';
+  const phoneRanPlane: 'control' | 'data' = playback.stageIndex >= 1 ? 'data' : 'control';
   const transitioningNodeSet = new Set(transitioningNodeIds);
   const transitioningEdgeSet = new Set(transitioningEdgeIds);
   const bubbleFor = (nodeId: string) => playback.bubbles[nodeId] ?? transitioningBubbles[nodeId]?.text;
@@ -3848,8 +3858,8 @@ function buildGraph(
     // External Boxes Components
     { id: 'ott-ordering', type: 'mission', hidden: !visibleSet.has('ott-ordering'), position: { x: LAYOUT.nodes.ottOrdering.x, y: LAYOUT.nodes.ottOrdering.y }, style: { width: LAYOUT.nodes.ottOrdering.width }, data: { nodeId: 'ott-ordering', label: t(locale, 'graph.node.orderingAgent.label'), kind: 'agent', role: t(locale, 'graph.node.orderingAgent.role'), active: activeNodeSet.has('ott-ordering'), flashActive: flashFor('ott-ordering'), transitioning: transitioningNodeSet.has('ott-ordering'), context: activeNodeSet.has('ott-ordering'), handles: ['in-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('ott-ordering'), message: bubbleFor('ott-ordering'), messageIcon: bubbleIconFor('ott-ordering'), messageState: bubbleStateFor('ott-ordering'), messageLeaving: bubbleLeavingFor('ott-ordering'), plan: planFor('ott-ordering') ? { title: planFor('ott-ordering')!.title, items: planFor('ott-ordering')!.items } : undefined, planLeaving: planLeavingFor('ott-ordering') } },
     { id: 'ott-gw', type: 'mission', hidden: !visibleSet.has('ott-gw'), position: { x: LAYOUT.nodes.ottGw.x, y: LAYOUT.nodes.ottGw.y }, style: { width: LAYOUT.nodes.ottGw.width }, data: { nodeId: 'ott-gw', label: t(locale, 'graph.node.ottGateway.label'), kind: 'gw', role: t(locale, 'graph.node.ottGateway.role'), active: activeNodeSet.has('ott-gw'), flashActive: flashFor('ott-gw'), transitioning: transitioningNodeSet.has('ott-gw'), context: activeNodeSet.has('ott-gw'), handles: ['in-left', 'out-right', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('ott-gw'), message: bubbleFor('ott-gw'), messageIcon: bubbleIconFor('ott-gw'), messageState: bubbleStateFor('ott-gw'), messageLeaving: bubbleLeavingFor('ott-gw') } },
-    { id: 'mno-gw', type: 'mission', hidden: !visibleSet.has('mno-gw'), position: { x: LAYOUT.nodes.mnoGw.x, y: LAYOUT.nodes.mnoGw.y }, style: { width: LAYOUT.nodes.mnoGw.width }, data: { nodeId: 'mno-gw', label: t(locale, 'graph.node.mnoGateway.label'), kind: 'gw', role: t(locale, 'graph.node.mnoGateway.role'), active: activeNodeSet.has('mno-gw'), flashActive: flashFor('mno-gw'), transitioning: transitioningNodeSet.has('mno-gw'), context: activeNodeSet.has('mno-gw'), handles: ['in-top', 'in-left', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('mno-gw'), message: bubbleFor('mno-gw'), messageIcon: bubbleIconFor('mno-gw'), messageState: bubbleStateFor('mno-gw'), messageLeaving: bubbleLeavingFor('mno-gw') } },
-    { id: 'mno-endpoint', type: 'mission', hidden: !visibleSet.has('mno-endpoint'), position: { x: LAYOUT.nodes.mnoEndpoint.x, y: LAYOUT.nodes.mnoEndpoint.y }, style: { width: LAYOUT.nodes.mnoEndpoint.width, height: LAYOUT.nodes.mnoEndpoint.height }, data: { label: t(locale, 'graph.node.robotArm.label'), kind: 'arm', active: activeNodeSet.has('mno-endpoint'), flashActive: flashFor('mno-endpoint'), transitioning: transitioningNodeSet.has('mno-endpoint'), handles: ['in-left'], appearance: 'robot-arm', embeddedCard: { visible: true, chips: ['🪪 did:3gpp:a18f4d2c@mnob.com', `🦾 ${t(locale, 'graph.node.robotArm.chipLabel')}`, `📦 ${t(locale, 'graph.card.payload5kg')}`, '⚙️ RobotFactory'] }, processing: playback.phase === 'running' && activeNodeSet.has('mno-endpoint'), message: bubbleFor('mno-endpoint'), messageIcon: bubbleIconFor('mno-endpoint'), messageState: bubbleStateFor('mno-endpoint'), messageLeaving: bubbleLeavingFor('mno-endpoint'), plan: planFor('mno-endpoint') ? { title: planFor('mno-endpoint')!.title, items: planFor('mno-endpoint')!.items } : undefined, planLeaving: planLeavingFor('mno-endpoint') } },
+    { id: 'mno-gw', type: 'mission', hidden: !visibleSet.has('mno-gw'), position: { x: LAYOUT.nodes.mnoGw.x, y: LAYOUT.nodes.mnoGw.y }, style: { width: LAYOUT.nodes.mnoGw.width }, data: { nodeId: 'mno-gw', label: t(locale, 'graph.node.mnoGateway.label'), kind: 'gw', role: t(locale, 'graph.node.mnoGateway.role'), active: activeNodeSet.has('mno-gw'), flashActive: flashFor('mno-gw'), transitioning: transitioningNodeSet.has('mno-gw'), context: activeNodeSet.has('mno-gw'), handles: ['in-top', 'in-left', 'out-right', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('mno-gw'), message: bubbleFor('mno-gw'), messageIcon: bubbleIconFor('mno-gw'), messageState: bubbleStateFor('mno-gw'), messageLeaving: bubbleLeavingFor('mno-gw') } },
+    { id: 'mno-endpoint', type: 'mission', hidden: !visibleSet.has('mno-endpoint'), position: { x: LAYOUT.nodes.mnoEndpoint.x, y: LAYOUT.nodes.mnoEndpoint.y }, style: { width: LAYOUT.nodes.mnoEndpoint.width, height: LAYOUT.nodes.mnoEndpoint.height }, data: { label: t(locale, 'graph.node.robotArm.label'), kind: 'arm', active: activeNodeSet.has('mno-endpoint'), flashActive: flashFor('mno-endpoint'), transitioning: transitioningNodeSet.has('mno-endpoint'), handles: ['in-top', 'in-left'], appearance: 'robot-arm', embeddedCard: { visible: true, chips: ['🪪 did:3gpp:a18f4d2c@mnob.com', `🦾 ${t(locale, 'graph.node.robotArm.chipLabel')}`, `📦 ${t(locale, 'graph.card.payload5kg')}`, '⚙️ RobotFactory'] }, processing: playback.phase === 'running' && activeNodeSet.has('mno-endpoint'), message: bubbleFor('mno-endpoint'), messageIcon: bubbleIconFor('mno-endpoint'), messageState: bubbleStateFor('mno-endpoint'), messageLeaving: bubbleLeavingFor('mno-endpoint'), plan: planFor('mno-endpoint') ? { title: planFor('mno-endpoint')!.title, items: planFor('mno-endpoint')!.items } : undefined, planLeaving: planLeavingFor('mno-endpoint') } },
     { id: 'arm-agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.armAgentCard.x, y: LAYOUT.nodes.armAgentCard.y }, style: { width: LAYOUT.nodes.armAgentCard.width }, data: { label: t(locale, 'graph.node.armAgentCard.label'), kind: 'card', details: graphCardDetails({ label: t(locale, 'graph.card.did'), value: '🪪 did:3gpp:a18f4d2c@mnob.com' }, { label: t(locale, 'graph.card.type'), values: [`🦾 ${t(locale, 'graph.node.robotArm.chipLabel')}`, '⚙️ RobotFactory'] }), active: activeNodeSet.has('arm-agent-card'), flashActive: flashFor('arm-agent-card'), transitioning: transitioningNodeSet.has('arm-agent-card'), handles: ['in-top'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('arm-agent-card'), message: bubbleFor('arm-agent-card'), messageIcon: bubbleIconFor('arm-agent-card'), messageState: bubbleStateFor('arm-agent-card'), messageLeaving: bubbleLeavingFor('arm-agent-card') } },
   ];
 
@@ -3878,7 +3888,7 @@ function buildGraph(
     { id: 'e-cmcc-mno-gw', source: 'agent-gw', sourceHandle: 'out-right-bottom', target: 'mno-gw', targetHandle: 'in-left', type: 'mission', hidden: !visibleSet.has('agent-gw') || !visibleSet.has('mno-gw'), data: { kind: 'baseline', state: activeEdgeSet.has('e-cmcc-mno-gw') ? 'selected' : 'idle', transitioning: transitioningEdgeSet.has('e-cmcc-mno-gw') } },
     { id: 'e-ott-gw-ordering', source: 'ott-gw', sourceHandle: 'out-right', target: 'ott-ordering', targetHandle: 'in-bottom', type: 'mission', hidden: !visibleSet.has('ott-gw') || !visibleSet.has('ott-ordering'), data: { kind: 'baseline', state: activeEdgeSet.has('e-ott-gw-ordering') ? 'selected' : 'idle', transitioning: transitioningEdgeSet.has('e-ott-gw-ordering') } },
     { id: 'e-ott-gw-mno-gw', source: 'ott-gw', sourceHandle: 'out-bottom', target: 'mno-gw', targetHandle: 'in-top', type: 'mission', hidden: !visibleSet.has('ott-gw') || !visibleSet.has('mno-gw'), data: { kind: 'baseline', state: activeEdgeSet.has('e-ott-gw-mno-gw') ? 'selected' : 'idle', transitioning: transitioningEdgeSet.has('e-ott-gw-mno-gw') } },
-    { id: 'e-mno-gw-endpoint', source: 'mno-gw', sourceHandle: 'out-bottom', target: 'mno-endpoint', targetHandle: 'in-left', type: 'mission', hidden: !visibleSet.has('mno-gw') || !visibleSet.has('mno-endpoint'), data: { kind: 'baseline', state: activeEdgeSet.has('e-mno-gw-endpoint') ? 'selected' : 'idle', transitioning: transitioningEdgeSet.has('e-mno-gw-endpoint') } },
+    { id: 'e-mno-gw-endpoint', source: 'mno-gw', sourceHandle: 'out-right', target: 'mno-endpoint', targetHandle: 'in-top', type: 'mission', hidden: !visibleSet.has('mno-gw') || !visibleSet.has('mno-endpoint'), data: { kind: 'baseline', state: activeEdgeSet.has('e-mno-gw-endpoint') ? 'selected' : 'idle', transitioning: transitioningEdgeSet.has('e-mno-gw-endpoint') } },
     { id: 'e-arm-agent-card', source: 'mno-endpoint', sourceHandle: 'out-bottom', target: 'arm-agent-card', targetHandle: 'in-top', type: 'mission', hidden: true, data: { kind: 'baseline', state: activeEdgeSet.has('e-arm-agent-card') ? 'selected' : 'idle', transitioning: transitioningEdgeSet.has('e-arm-agent-card') } },
   ];
 
@@ -3904,7 +3914,8 @@ function buildGraph(
             tone:
               activeEdgeSet.has(edge.id) &&
               edge.id !== 'e-srf-ran' &&
-              !DATA_PLANE_EDGE_IDS.has(edge.id)
+              !DATA_PLANE_EDGE_IDS.has(edge.id) &&
+              !(edge.id === 'e-ran-phone' && phoneRanPlane === 'data')
                 ? playback.activeEdgeTone
                 : undefined,
             animationDirection: activeEdgeSet.has(edge.id) ? playback.activeEdgeDirections[edge.id] : undefined,

@@ -224,7 +224,7 @@ body {
   gap: 6px;
   text-align: center;
   z-index: 6;
-  animation: bubble-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: canvas-caption-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   transform-origin: top center;
   pointer-events: none;
 }
@@ -247,7 +247,51 @@ body {
 }
 
 .canvas-caption-card-leaving {
-  animation: bubble-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: canvas-caption-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.canvas-legend {
+  position: absolute;
+  left: 20px;
+  bottom: 18px;
+  display: inline-flex;
+  gap: 8px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.canvas-legend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.canvas-legend-pill::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.canvas-legend-pill-control::before {
+  background: #7c3aed;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
+}
+
+.canvas-legend-pill-data::before {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.14);
 }
 
 .bottom-strip {
@@ -1891,6 +1935,28 @@ body {
   to {
     opacity: 0;
     transform: translateY(-50%) translateX(-8px) scale(0.975);
+  }
+}
+
+@keyframes canvas-caption-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes canvas-caption-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px) scale(0.975);
   }
 }
 
