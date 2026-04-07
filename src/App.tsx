@@ -193,7 +193,7 @@ type RetainedGraphCaption = NonNullable<PlaybackFrame['graphCaption']>;
 type RetainedPlan = NonNullable<PlaybackFrame['planBubble']>;
 type BackendStatus = { stage: number };
 
-const ACTION_DELAY_MS = 5000;
+const ACTION_DELAY_MS = 2000;
 const CHECKLIST_PROCESSING_DELAY_MS = 2000;
 const CHECKLIST_SETTLE_DELAY_MS = 1000;
 const BACKEND_STATUS_POLL_MS = 500;
@@ -1597,6 +1597,7 @@ function createIdleFrame(
   stageIndex: number,
   actionIndex: number,
   revealedNodeIds: string[],
+  retainedActivity?: Pick<PlaybackFrame, 'activeEdgeTone' | 'activeNodeIds' | 'activeEdgeIds' | 'activeEdgeDirections'>,
 ): PlaybackFrame {
   const stage = script.stages[stageIndex];
   const nextStage = script.stages[stageIndex + 1];
@@ -1611,12 +1612,12 @@ function createIdleFrame(
     stageIndex,
     actionIndex,
     checklistPhase: undefined,
-    activeEdgeTone: undefined,
+    activeEdgeTone: retainedActivity?.activeEdgeTone,
     currentStageTitle: stage ? resolveCopy(stage.title, locale) : undefined,
     nextStageTitle: nextStage ? resolveCopy(nextStage.title, locale) : t(locale, 'finish'),
-    activeNodeIds: [],
-    activeEdgeIds: [],
-    activeEdgeDirections: {},
+    activeNodeIds: retainedActivity?.activeNodeIds ?? [],
+    activeEdgeIds: retainedActivity?.activeEdgeIds ?? [],
+    activeEdgeDirections: retainedActivity?.activeEdgeDirections ?? {},
     visibleNodeIds: deriveVisibleNodeIds(script, revealedNodeIds),
     revealedNodeIds,
     bubbles: {},
@@ -2487,7 +2488,6 @@ function Dashboard() {
     ) as Record<string, RetainedBubble>;
     const nextCaption = playback.graphCaption;
     const nextPlan = playback.planBubble;
-    const leavingNodeIds = previous.nodeIds.filter((id) => !nextNodeIds.includes(id));
     const leavingEdgeIds = previous.edgeIds.filter((id) => !nextEdgeIds.includes(id));
     const leavingBubbles = Object.fromEntries(
       Object.entries(previous.bubbles).filter(([nodeId, bubble]) => {
@@ -2512,8 +2512,8 @@ function Dashboard() {
       : undefined;
     transitionRef.current = { nodeIds: nextNodeIds, edgeIds: nextEdgeIds, bubbles: nextBubbles, graphCaption: nextCaption, planBubble: nextPlan };
     clearTransitionTimer();
-    if (leavingNodeIds.length || leavingEdgeIds.length || Object.keys(leavingBubbles).length || leavingCaption || leavingPlan) {
-      setTransitioningNodeIds(leavingNodeIds);
+    if (leavingEdgeIds.length || Object.keys(leavingBubbles).length || leavingCaption || leavingPlan) {
+      setTransitioningNodeIds([]);
       setTransitioningEdgeIds(leavingEdgeIds);
       setTransitioningBubbles(leavingBubbles);
       setTransitioningCaptions(leavingCaption ? { [leavingCaption.nodeId]: leavingCaption } : {});
@@ -2698,14 +2698,24 @@ function Dashboard() {
           if (nextActionIndex < actions.length) {
             return buildPlaybackFrame(script, locale, prev.stageIndex, nextActionIndex, 'running', revealed, 'processing');
           }
-          return createIdleFrame(script, locale, 'gate', prev.stageIndex, prev.actionIndex, revealed);
+          return createIdleFrame(script, locale, 'gate', prev.stageIndex, prev.actionIndex, revealed, {
+            activeEdgeTone: prev.activeEdgeTone,
+            activeNodeIds: prev.activeNodeIds,
+            activeEdgeIds: prev.activeEdgeIds,
+            activeEdgeDirections: prev.activeEdgeDirections,
+          });
         }
       }
       const nextActionIndex = prev.actionIndex + 1;
       if (nextActionIndex < actions.length) {
         return buildPlaybackFrame(script, locale, prev.stageIndex, nextActionIndex, 'running', revealed, undefined);
       }
-      return createIdleFrame(script, locale, 'gate', prev.stageIndex, prev.actionIndex, revealed);
+      return createIdleFrame(script, locale, 'gate', prev.stageIndex, prev.actionIndex, revealed, {
+        activeEdgeTone: prev.activeEdgeTone,
+        activeNodeIds: prev.activeNodeIds,
+        activeEdgeIds: prev.activeEdgeIds,
+        activeEdgeDirections: prev.activeEdgeDirections,
+      });
     });
   }, [clearTimer, getActionsForStage, locale]);
 
