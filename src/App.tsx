@@ -3078,7 +3078,7 @@ function Dashboard() {
                         <div className="narrative-stage-expanded">
                           {stage.items.length ? (
                             <div className="narrative-stage-items">
-                              {stage.items.map((item) => (
+                              {stage.items.map((item, itemIndex) => (
                                 <div
                                   key={item.id}
                                   className={cn(
@@ -3087,8 +3087,8 @@ function Dashboard() {
                                     item.phase === 'done' && 'step-queue-item-done',
                                   )}
                                 >
-                                  <span className="step-queue-dot">
-                                    {item.phase === 'done' ? '✓' : item.phase === 'processing' ? '•' : ''}
+                                  <span className="step-queue-number">
+                                    {itemIndex + 1}
                                   </span>
                                   <div className="step-queue-copy">
                                     <span className="step-queue-label">
@@ -3099,18 +3099,26 @@ function Dashboard() {
                                       <div className="step-queue-description">{renderMessageBody(stage.body)}</div>
                                     ) : null}
                                   </div>
+                                  <span className={cn(
+                                    'step-queue-status',
+                                    item.phase === 'processing' && 'step-queue-status-active',
+                                    item.phase === 'done' && 'step-queue-status-done',
+                                  )}>
+                                    {item.phase === 'done' ? '✓' : item.phase === 'processing' ? '•' : ''}
+                                  </span>
                                 </div>
                               ))}
                             </div>
                           ) : stage.status === 'active' && stage.body ? (
                             <div className="narrative-stage-items">
                               <div className="step-queue-item step-queue-item-active">
-                                <span className="step-queue-dot">•</span>
+                                <span className="step-queue-number">1</span>
                                 <div className="step-queue-copy">
                                   <span className="step-queue-label">{t(locale, 'inProgress')}</span>
                                   <span className="step-queue-value">{stage.summaryTitle}</span>
                                   <div className="step-queue-description">{renderMessageBody(stage.body)}</div>
                                 </div>
+                                <span className="step-queue-status step-queue-status-active">•</span>
                               </div>
                             </div>
                           ) : null}
@@ -3316,10 +3324,12 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
         </div>
       )}
       {data.message && (
+        !data.caption && (
         <div className={cn("mission-node-bubble", data.messageState === 'done' && "mission-node-bubble-done", data.messageLeaving && "mission-node-bubble-leaving")}>
           <BubbleIconGlyph icon={data.messageIcon} state={data.messageState} />
           <span>{data.message}</span>
         </div>
+        )
       )}
       <div className={cn("mission-node", data.active && "mission-node-active", data.flashActive && "mission-node-flash", data.transitioning && "mission-node-transitioning")}>
         {isIllustratedDevice ? (
