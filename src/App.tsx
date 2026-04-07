@@ -1583,6 +1583,14 @@ function resolveChecklistProcessingDelay(action?: FlatAction) {
   return Math.max(0, action.delayMs);
 }
 
+function buildFinalDeliveryPresentation(messages: PresentationMessage[]) {
+  return {
+    title: 'Delivery completed successfully',
+    body: '- **RobotDog** and **RobotArm** completed peer verification.\n- The handoff finished and the task is now closed.',
+    messages,
+  };
+}
+
 function derivePresentationCard(
   script: DemoScript,
   playback: PlaybackFrame,
@@ -1602,11 +1610,7 @@ function derivePresentationCard(
 
   if (playback.phase === 'complete') {
     if (playback.stageIndex === 3) {
-      return {
-        title: 'Delivery completed successfully',
-        body: '- **RobotDog** and **RobotArm** completed peer verification.\n- The handoff finished and the task is now closed.',
-        messages,
-      };
+      return buildFinalDeliveryPresentation(messages);
     }
     const narrative = deriveScenarioNarrative(
       ['state_8'],
@@ -1637,6 +1641,9 @@ function derivePresentationCard(
         body: '- The phone has received the **RobotArm** identity.\n- The delivery workflow is now moving into live coordination.',
         messages,
       };
+    }
+    if (playback.stageIndex === 3) {
+      return buildFinalDeliveryPresentation(messages);
     }
     const narrative = deriveScenarioNarrative(
       STAGE_SCENARIO_MAP[playback.stageIndex] ?? [],
