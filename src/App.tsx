@@ -94,6 +94,14 @@ type PresentationMessage = {
     sections: PresentationMessageDetailSection[];
   };
 };
+type NarrativeStageSummary = {
+  id: string;
+  summaryTitle: string;
+  status: 'pending' | 'active' | 'done';
+  taskTitle: string;
+  body?: string;
+  items: Array<{ id: string; label: string; phase: 'pending' | 'processing' | 'done' }>;
+};
 type ScriptBubble = { node: string; text: string; icon?: BubbleIcon };
 type ScriptAction = {
   id: string;
@@ -1591,6 +1599,100 @@ function buildFinalDeliveryPresentation(messages: PresentationMessage[]) {
   };
 }
 
+function getFixedStageSummaryTitle(stageIndex: number) {
+  switch (stageIndex) {
+    case 0:
+      return 'Onboard Family Domain';
+    case 1:
+      return 'Discover And Assign Courier';
+    case 2:
+      return 'Notify And Coordinate Delivery';
+    case 3:
+      return 'Verify And Close Handoff';
+    default:
+      return `Stage ${stageIndex + 1}`;
+  }
+}
+
+function getStageNarrativeSnapshot(script: DemoScript, stageIndex: number) {
+  const stage = script.stages[stageIndex];
+  if (!stage) {
+    return { title: 'Narrative unavailable', body: '' };
+  }
+  const firstAction = flattenStage(stage)[0];
+  if (stageIndex === 0) {
+    return {
+      title: 'Family domain created and ready',
+      body: '- **Family Domain** is now active.\n- Members: **UE Assistant** and **RobotDog**.\n- Domain ID: `4sg520s2.acn.domain.cmcc`.',
+    };
+  }
+  if (stageIndex === 1) {
+    return {
+      title: 'Courier discovered and pickup assigned',
+      body: '- **RobotArm** has been selected as the courier.\n- The pickup task has been delivered across both gateways.',
+    };
+  }
+  if (stageIndex === 2) {
+    return {
+      title: 'User notified and delivery is underway',
+      body: '- The phone has received the **RobotArm** identity.\n- The delivery workflow is now moving into live coordination.',
+    };
+  }
+  if (stageIndex === 3) {
+    return buildFinalDeliveryPresentation([]);
+  }
+  const scenarioIds = firstAction ? (ACTION_SCENARIO_MAP[firstAction.id] ?? STAGE_SCENARIO_MAP[stageIndex] ?? []) : (STAGE_SCENARIO_MAP[stageIndex] ?? []);
+  return deriveScenarioNarrative(
+    scenarioIds,
+    firstAction?.presentation?.title ?? stage.title,
+    firstAction?.presentation?.body ?? `- **Current step:** ${firstAction?.stepLabel ?? stage.title}`,
+  );
+}
+
+function deriveNarrativeStageSummaries(
+  script: DemoScript,
+  playback: PlaybackFrame,
+  presentationCard: { title: string; body: string; messages: PresentationMessage[] },
+): NarrativeStageSummary[] {
+  return script.stages.map((stage, index) => {
+    const stageActions = flattenStage(stage);
+    let status: NarrativeStageSummary['status'] = 'pending';
+    if (playback.phase === 'complete') {
+      status = 'done';
+    } else if (playback.phase !== 'standby') {
+      if (index < playback.stageIndex) {
+        status = 'done';
+      } else if (index === playback.stageIndex) {
+        status = playback.phase === 'gate' ? 'done' : 'active';
+      }
+    }
+
+    const fallbackSnapshot = getStageNarrativeSnapshot(script, index);
+    const title = index === playback.stageIndex && playback.phase !== 'standby'
+      ? presentationCard.title
+      : fallbackSnapshot.title;
+    const body = index === playback.stageIndex && playback.phase !== 'standby'
+      ? presentationCard.body
+      : fallbackSnapshot.body;
+    const items = index === playback.stageIndex
+      ? playback.checklistItems
+      : stageActions.map((action) => ({
+          id: action.id,
+          label: action.checklistTitle ? checklistDisplayId(action.id) : action.stepLabel,
+          phase: status === 'done' ? 'done' as const : 'pending' as const,
+        }));
+
+    return {
+      id: stage.id,
+      summaryTitle: getFixedStageSummaryTitle(index),
+      status,
+      taskTitle: title,
+      body,
+      items,
+    };
+  });
+}
+
 function derivePresentationCard(
   script: DemoScript,
   playback: PlaybackFrame,
@@ -1930,6 +2032,7 @@ function Dashboard() {
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<PresentationMessage | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [expandedNarrativeStageId, setExpandedNarrativeStageId] = useState<string | null>(null);
   const scriptRef = useRef(scriptDoc);
   const playbackRef = useRef(playback);
   const pollInFlightRef = useRef(false);
@@ -2348,6 +2451,19 @@ function Dashboard() {
       ? 'Continue'
       : 'Start';
   const presentationCard = derivePresentationCard(scriptDoc, playback, activeAction);
+  const narrativeStages = deriveNarrativeStageSummaries(scriptDoc, playback, presentationCard);
+  const currentNarrativeTitle = presentationCard.title;
+
+  useEffect(() => {
+    const currentStageId = scriptDoc.stages[playback.stageIndex]?.id ?? null;
+    if (currentStageId) {
+      setExpandedNarrativeStageId(currentStageId);
+      return;
+    }
+    if (playback.phase === 'standby') {
+      setExpandedNarrativeStageId(null);
+    }
+  }, [playback.phase, playback.stageIndex, scriptDoc.stages]);
 
   useEffect(() => {
     const previousPhase = previousPlaybackPhaseRef.current;
@@ -2521,10 +2637,83 @@ function Dashboard() {
           <aside className="sidebar">
             <div className="presentation-panel">
               <div className="presentation-panel-kicker">✨ AI Narrative</div>
-              <h2 className="presentation-panel-title">{presentationCard.title}</h2>
-              <div className="presentation-panel-body">{renderMessageBody(presentationCard.body)}</div>
+              <h2 className="presentation-current-title">{currentNarrativeTitle}</h2>
+              <div className="narrative-progress">
+                <div className="narrative-progress-list">
+                  {narrativeStages.map((stage, index) => (
+                    <section
+                      key={stage.id}
+                      className={cn(
+                        'narrative-stage-card',
+                        stage.status === 'active' && 'narrative-stage-card-active',
+                        stage.status === 'done' && 'narrative-stage-card-done',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        className="narrative-stage-head"
+                        onClick={() => setExpandedNarrativeStageId((current) => current === stage.id ? null : stage.id)}
+                      >
+                        <span className={cn(
+                          'narrative-stage-dot',
+                          stage.status === 'active' && 'narrative-stage-dot-active',
+                          stage.status === 'done' && 'narrative-stage-dot-done',
+                        )}>
+                          {stage.status === 'done' ? '✓' : index + 1}
+                        </span>
+                        <div className="narrative-stage-copy">
+                          <div className="narrative-stage-summary">{stage.summaryTitle}</div>
+                          <div className="narrative-stage-task-title">{stage.taskTitle}</div>
+                        </div>
+                      </button>
+                      {expandedNarrativeStageId === stage.id ? (
+                        <div className="narrative-stage-expanded">
+                          {stage.items.length ? (
+                            <div className="narrative-stage-items">
+                              {stage.items.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className={cn(
+                                    'step-queue-item',
+                                    item.phase === 'processing' && 'step-queue-item-active',
+                                    item.phase === 'done' && 'step-queue-item-done',
+                                  )}
+                                >
+                                  <span className="step-queue-dot">
+                                    {item.phase === 'done' ? '✓' : item.phase === 'processing' ? '•' : ''}
+                                  </span>
+                                  <div className="step-queue-copy">
+                                    <span className="step-queue-label">
+                                      {item.phase === 'processing' ? 'In Progress' : item.phase === 'done' ? 'Done' : 'Pending'}
+                                    </span>
+                                    <span className="step-queue-value">{item.label}</span>
+                                    {stage.status === 'active' && item.phase === 'processing' && stage.body ? (
+                                      <div className="step-queue-description">{renderMessageBody(stage.body)}</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : stage.status === 'active' && stage.body ? (
+                            <div className="narrative-stage-items">
+                              <div className="step-queue-item step-queue-item-active">
+                                <span className="step-queue-dot">•</span>
+                                <div className="step-queue-copy">
+                                  <span className="step-queue-label">In Progress</span>
+                                  <span className="step-queue-value">{stage.taskTitle}</span>
+                                  <div className="step-queue-description">{renderMessageBody(stage.body)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </section>
+                  ))}
+                </div>
+              </div>
               <div className="presentation-chat">
-                <div className="presentation-chat-kicker">Agent Chat & Messages</div>
+                <div className="presentation-chat-kicker">Agent Messages</div>
                 <div ref={presentationChatListRef} className="presentation-chat-list">
                   {presentationCard.messages.map((message, index) => (
                     <button
@@ -2549,13 +2738,6 @@ function Dashboard() {
                         <span className="presentation-chat-speaker">{message.title}</span>
                         {message.time ? <span className="presentation-chat-time">{message.time}</span> : null}
                       </div>
-                      {message.chips?.length ? (
-                        <div className="presentation-chat-chips">
-                          {message.chips.map((chip) => (
-                            <span key={chip} className="presentation-chat-chip">{chip}</span>
-                          ))}
-                        </div>
-                      ) : null}
                       <div className="presentation-chat-body">{renderMessageBody(message.body)}</div>
                       </div>
                     </button>
@@ -2579,13 +2761,6 @@ function Dashboard() {
               <h3 className="message-detail-title">{selectedMessage.details.title ?? selectedMessage.title}</h3>
               {selectedMessage.time ? <span className="message-detail-time">{selectedMessage.time}</span> : null}
             </div>
-            {selectedMessage.chips?.length ? (
-              <div className="message-detail-chips">
-                {selectedMessage.chips.map((chip) => (
-                  <span key={chip} className="message-detail-chip">{chip}</span>
-                ))}
-              </div>
-            ) : null}
             <div className="message-detail-summary">{renderMessageBody(selectedMessage.body)}</div>
             <div className="message-detail-sections">
               {selectedMessage.details.sections.map((section) => (
