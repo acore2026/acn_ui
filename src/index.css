@@ -131,7 +131,8 @@ body {
   background: var(--color-panel);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 22px;
   padding-left: 30px;
   height: 100%;
@@ -207,11 +208,13 @@ body {
 }
 
 .presentation-panel {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 8px 4px;
+  overflow: hidden;
 }
 
 .presentation-panel-kicker {
@@ -344,9 +347,12 @@ body {
 .presentation-chat-list {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 10px;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .presentation-chat-item {
@@ -846,6 +852,25 @@ body {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
+.settings-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-range-input {
+  flex: 1 1 auto;
+  accent-color: #2563eb;
+}
+
+.settings-range-value {
+  min-width: 48px;
+  text-align: right;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+}
+
 .settings-actions {
   display: flex;
   gap: 8px;
@@ -1168,7 +1193,7 @@ body {
 }
 
 .mission-node-asset-card-shell .mission-node-label {
-  font-size: 0.66rem;
+  font-size: calc(0.66rem * var(--graph-font-scale, 1));
   line-height: 1;
 }
 
@@ -1224,7 +1249,7 @@ body {
 }
 
 .mission-node-pill-shell .mission-node-label {
-  font-size: 0.64rem;
+  font-size: calc(0.64rem * var(--graph-font-scale, 1));
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -1379,7 +1404,7 @@ body {
   border: 0;
   box-shadow: none;
   color: #64748b;
-  font-size: 0.5rem;
+  font-size: calc(0.5rem * var(--graph-font-scale, 1));
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -1417,7 +1442,7 @@ body {
 }
 
 .mission-node-label {
-  font-size: 0.78rem;
+  font-size: calc(0.78rem * var(--graph-font-scale, 1));
   font-weight: 800;
   color: var(--color-text);
   line-height: 1.05;
@@ -1436,7 +1461,7 @@ body {
     0 0 0 1px color-mix(in srgb, var(--node-tint) 18%, transparent),
     0 12px 26px rgba(15, 23, 42, 0.1);
   color: #475569;
-  font-size: 0.62rem;
+  font-size: calc(0.62rem * var(--graph-font-scale, 1));
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: 0.01em;
@@ -1514,7 +1539,7 @@ body {
 }
 
 .mission-node-plan-title {
-  font-size: 0.54rem;
+  font-size: calc(0.54rem * var(--graph-font-scale, 1));
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1522,7 +1547,7 @@ body {
 }
 
 .mission-node-plan-name {
-  font-size: 0.62rem;
+  font-size: calc(0.62rem * var(--graph-font-scale, 1));
   font-weight: 700;
   color: #475569;
   white-space: nowrap;
@@ -1543,7 +1568,7 @@ body {
   grid-template-columns: 12px 1fr;
   gap: 6px;
   align-items: center;
-  font-size: 0.56rem;
+  font-size: calc(0.56rem * var(--graph-font-scale, 1));
   line-height: 1.15;
   color: #64748b;
 }
@@ -1568,7 +1593,7 @@ body {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 0.55rem;
+  font-size: calc(0.55rem * var(--graph-font-scale, 1));
   font-weight: 900;
   color: white;
   background: rgba(148, 163, 184, 0.32);
@@ -1592,7 +1617,7 @@ body {
 }
 
 .mission-node-plan-phase {
-  font-size: 0.5rem;
+  font-size: calc(0.5rem * var(--graph-font-scale, 1));
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1716,7 +1741,7 @@ body {
 }
 
 .mission-node-role {
-  font-size: 0.6rem;
+  font-size: calc(0.6rem * var(--graph-font-scale, 1));
   font-weight: 600;
   color: #66768e;
   text-transform: none;
@@ -1737,7 +1762,7 @@ body {
 }
 
 .mission-node-detail-label {
-  font-size: 0.5rem;
+  font-size: calc(0.5rem * var(--graph-font-scale, 1));
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1745,7 +1770,7 @@ body {
 }
 
 .mission-node-detail-value {
-  font-size: 0.64rem;
+  font-size: calc(0.64rem * var(--graph-font-scale, 1));
   font-weight: 700;
   color: #334155;
   line-height: 1.2;
@@ -1767,7 +1792,7 @@ body {
   background: color-mix(in srgb, var(--node-tint) 9%, white);
   border: 1px solid color-mix(in srgb, var(--node-tint) 14%, rgba(148, 163, 184, 0.28));
   color: #334155;
-  font-size: 0.56rem;
+  font-size: calc(0.56rem * var(--graph-font-scale, 1));
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -1785,7 +1810,7 @@ body {
 .mission-node-agent-card-chip {
   min-height: 18px;
   padding: 0 7px;
-  font-size: 0.52rem;
+  font-size: calc(0.52rem * var(--graph-font-scale, 1));
 }
 
 .mission-node-active .mission-node-label {
@@ -1816,7 +1841,7 @@ body {
   border-radius: 999px;
 }
 .mission-node-router .mission-node-label {
-  font-size: 0.75rem;
+  font-size: calc(0.75rem * var(--graph-font-scale, 1));
   font-weight: 800;
 }
 .mission-node-router .mission-node-role {
@@ -1928,7 +1953,7 @@ body {
 .mission-node-device-label {
   justify-self: center;
   align-self: end;
-  font-size: 0.56rem;
+  font-size: calc(0.56rem * var(--graph-font-scale, 1));
   line-height: 1;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1962,7 +1987,7 @@ body {
 
 .mission-node-embedded-card-title {
   align-self: flex-start;
-  font-size: 0.58rem;
+  font-size: calc(0.58rem * var(--graph-font-scale, 1));
   line-height: 1;
   font-weight: 800;
   letter-spacing: 0.01em;
@@ -1991,7 +2016,7 @@ body {
 .mission-node-embedded-card .mission-node-agent-card-chip {
   min-height: 17px;
   padding: 0 6px;
-  font-size: 0.49rem;
+  font-size: calc(0.49rem * var(--graph-font-scale, 1));
   max-width: 100%;
 }
 
@@ -2034,7 +2059,7 @@ body {
   justify-content: flex-start;
   padding: 18px 22px;
   color: #1e3a8a;
-  font-size: 0.74rem;
+  font-size: calc(0.74rem * var(--graph-font-scale, 1));
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -2052,7 +2077,7 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(246, 249, 252, 0.4));
   padding: 13px 16px;
   color: #475569;
-  font-size: 0.57rem;
+  font-size: calc(0.57rem * var(--graph-font-scale, 1));
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -2067,7 +2092,7 @@ body {
     linear-gradient(180deg, rgba(240, 253, 250, 0.92), rgba(236, 253, 245, 0.72));
   background-size: 16px 16px, auto, auto;
   color: #115e59;
-  font-size: 0.56rem;
+  font-size: calc(0.56rem * var(--graph-font-scale, 1));
   letter-spacing: 0.14em;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.46),
@@ -2197,7 +2222,7 @@ body {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 0.5rem;
+  font-size: calc(0.5rem * var(--graph-font-scale, 1));
   font-weight: 800;
   color: #475569;
   background: rgba(255, 255, 255, 0.97);
@@ -2278,14 +2303,14 @@ body {
   border-radius: 999px;
   background: transparent;
   color: #0f172a;
-  font-size: 0.58rem;
+  font-size: calc(0.58rem * var(--graph-font-scale, 1));
   font-weight: 900;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .bus-node-caption {
-  font-size: 0.5rem;
+  font-size: calc(0.5rem * var(--graph-font-scale, 1));
   font-weight: 700;
   color: #0f172a;
   letter-spacing: 0.03em;

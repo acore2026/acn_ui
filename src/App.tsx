@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { 
   Repeat, Cpu, Play, Radio, Router, Smartphone, Square,
-  UserCheck, Settings, Database, Waypoints, Globe, Sparkles, Bot, Wrench, LoaderCircle, BrainCircuit, CheckCircle2, ScanSearch, SkipBack, SkipForward, RotateCcw, WifiOff, Ellipsis, MessageSquareText, Workflow, ScrollText, X, ChevronLeft, ChevronRight
+  UserCheck, Settings, Database, Waypoints, Globe, Sparkles, Bot, Wrench, LoaderCircle, BrainCircuit, CheckCircle2, ScanSearch, SkipBack, SkipForward, RotateCcw, WifiOff, Ellipsis, MessageSquareText, Workflow, ScrollText, X, ChevronLeft, ChevronRight, Minus, Plus
 } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { Background, BaseEdge, Handle, Position, ReactFlow, ReactFlowProvider, getBezierPath, applyNodeChanges, applyEdgeChanges, type Edge, type EdgeProps, type Node, type NodeProps, type NodeTypes, type OnNodesChange, type OnEdgesChange, type Viewport } from '@xyflow/react';
+import type { CSSProperties, ReactNode } from 'react';
+import { Background, BaseEdge, Handle, Position, ReactFlow, ReactFlowProvider, getBezierPath, applyNodeChanges, applyEdgeChanges, type Edge, type EdgeProps, type Node, type NodeProps, type NodeTypes, type OnNodesChange, type OnEdgesChange, type ReactFlowInstance, type Viewport } from '@xyflow/react';
 import { load as loadYaml } from 'js-yaml';
 import '@xyflow/react/dist/style.css';
 import { cn } from './utils';
@@ -17,6 +17,13 @@ import {
   getRuntimeBackendEndpoint,
   normalizeBackendEndpoint,
 } from './config';
+import {
+  type Locale,
+  LOCALE_STORAGE_KEY,
+  getCatalogText,
+  getInitialLocale,
+  resolveTextValue,
+} from './i18n';
 import state0Raw from '../scenarios/state_0.json?raw';
 import state1Raw from '../scenarios/state_1.json?raw';
 import state2Raw from '../scenarios/state_2.json?raw';
@@ -31,6 +38,7 @@ type NodeKind = 'endpoint'|'access'|'upf'|'router'|'service'|'idm'|'agent'|'srf'
 type LinkKind = 'baseline' | 'bus' | 'logic' | 'wireless';
 
 type DemoNodeData = { 
+  nodeId?: string;
   label: string; 
   kind: NodeKind;
   status?: string;
@@ -187,6 +195,13 @@ const CHECKLIST_PROCESSING_DELAY_MS = 2000;
 const CHECKLIST_SETTLE_DELAY_MS = 1000;
 const BACKEND_STATUS_POLL_MS = 500;
 const DEFAULT_VIEWPORT: Viewport = { x: 27, y: 32, zoom: 1.16 };
+const GRAPH_FONT_SCALE_STORAGE_KEY = 'acn-ui-graph-font-scale';
+const DEFAULT_GRAPH_FONT_SCALE = 1.2;
+const MIN_GRAPH_FONT_SCALE = 0.9;
+const MAX_GRAPH_FONT_SCALE = 1.6;
+const GRAPH_ZOOM_STEP = 1.06;
+const MIN_GRAPH_ZOOM = 0.5;
+const MAX_GRAPH_ZOOM = 2;
 const SCENARIO_RAW_BY_ID = {
   state_0: state0Raw,
   state_1: state1Raw,
@@ -216,6 +231,103 @@ const STAGE_SCENARIO_MAP: Record<number, string[]> = {
   2: ['state_5'],
   3: ['state_6', 'state_8'],
 };
+
+const CATALOG_KEY_ALIASES: Record<string, string> = {
+  appTitle: 'ui.appTitle',
+  live: 'ui.status.live',
+  disconnected: 'ui.status.disconnected',
+  settings: 'ui.settings.title',
+  backendEndpoint: 'ui.settings.backendEndpoint',
+  locale: 'ui.settings.locale',
+  english: 'ui.settings.english',
+  chinese: 'ui.settings.chinese',
+  debugMode: 'ui.settings.debugMode',
+  backend: 'ui.settings.backend',
+  save: 'ui.settings.save',
+  saved: 'ui.settings.saved',
+  stage: 'ui.settings.stage',
+  poll: 'ui.settings.poll',
+  updated: 'ui.settings.updated',
+  canvas: 'ui.settings.canvas',
+  ignored: 'ui.settings.ignored',
+  connected: 'ui.settings.connected',
+  never: 'ui.settings.never',
+  showScript: 'ui.settings.showScript',
+  hideScript: 'ui.settings.hideScript',
+  graphTextSize: 'ui.settings.graphTextSize',
+  graphTextScaleValue: 'ui.settings.graphTextScaleValue',
+  reset: 'ui.controls.reset',
+  pause: 'ui.controls.pause',
+  continue: 'ui.controls.continue',
+  start: 'ui.controls.start',
+  previousStep: 'ui.controls.previousStep',
+  nextStep: 'ui.controls.nextStep',
+  expandNarrativeTray: 'ui.sidebar.expandNarrativeTray',
+  collapseNarrativeTray: 'ui.sidebar.collapseNarrativeTray',
+  aiNarrative: 'ui.sidebar.aiNarrative',
+  agentMessages: 'ui.sidebar.agentMessages',
+  inProgress: 'ui.sidebar.inProgress',
+  done: 'ui.sidebar.done',
+  pending: 'ui.sidebar.pending',
+  notConfigured: 'narrative.notConfigured',
+  finish: 'narrative.finish',
+  processing: 'narrative.processing',
+  checklistFinished: 'narrative.checklistFinished',
+  narrativeUnavailable: 'narrative.narrativeUnavailable',
+  demo: 'narrative.demo',
+  currentStep: 'narrative.currentStep',
+  standbyTitle: 'narrative.standbyTitle',
+  standbyBody: 'narrative.standbyBody',
+  finalTitle: 'narrative.finalTitle',
+  finalBody: 'narrative.finalBody',
+  stage0Summary: 'narrative.stage0Summary',
+  stage1Summary: 'narrative.stage1Summary',
+  stage2Summary: 'narrative.stage2Summary',
+  stage3Summary: 'narrative.stage3Summary',
+  stage0GateTitle: 'narrative.stage0GateTitle',
+  stage0GateBody: 'narrative.stage0GateBody',
+  stage1GateTitle: 'narrative.stage1GateTitle',
+  stage1GateBody: 'narrative.stage1GateBody',
+  stage2GateTitle: 'narrative.stage2GateTitle',
+  stage2GateBody: 'narrative.stage2GateBody',
+  workflowCompleteTitle: 'narrative.workflowCompleteTitle',
+  workflowCompleteBody: 'narrative.workflowCompleteBody',
+  stageCompleteFallback: 'narrative.stageCompleteFallback',
+  nextNarrativeMoment: 'narrative.nextNarrativeMoment',
+  parseYamlError: 'errors.parseYaml',
+  yamlMustDefineObject: 'errors.yamlMustDefineObject',
+  backendStatusError: 'errors.backendStatus',
+  backendResetError: 'errors.backendReset',
+  currentStepFallback: 'narrative.currentStepFallback',
+  summary: 'sections.summary',
+  workflow: 'sections.workflow',
+  scenarioContext: 'sections.scenarioContext',
+  subject: 'sections.subject',
+  issuedIdentity: 'sections.issuedIdentity',
+  agentSummary: 'sections.agentSummary',
+  issuedArtifacts: 'sections.issuedArtifacts',
+  registryData: 'sections.registryData',
+  publicationResult: 'sections.publicationResult',
+  provisioningOutput: 'sections.provisioningOutput',
+  discoveryResult: 'sections.discoveryResult',
+  agentCard: 'sections.agentCard',
+  credentialPayload: 'sections.credentialPayload',
+};
+
+function t(locale: Locale, key: string) {
+  return getCatalogText(CATALOG_KEY_ALIASES[key] ?? key, locale);
+}
+
+function getInitialGraphFontScale() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_GRAPH_FONT_SCALE;
+  }
+  const raw = Number.parseFloat(window.localStorage.getItem(GRAPH_FONT_SCALE_STORAGE_KEY) ?? '');
+  if (!Number.isFinite(raw)) {
+    return DEFAULT_GRAPH_FONT_SCALE;
+  }
+  return Math.min(MAX_GRAPH_FONT_SCALE, Math.max(MIN_GRAPH_FONT_SCALE, raw));
+}
 
 function parseScenarioDoc(raw: string): ScenarioDoc {
   const parsed = JSON.parse(raw) as ScenarioDoc;
@@ -278,14 +390,45 @@ function getScenarioPipelineEntries(ids: string[], matcher?: (entry: ScenarioPip
   );
 }
 
-function getScenarioRouteLines(ids: string[], matcher?: (entry: ScenarioPipelineEntry) => boolean) {
+function localizeScenarioText(locale: Locale, value?: string, maxLength = 120) {
+  const text = cleanScenarioText(value, maxLength);
+  if (!text) {
+    return '';
+  }
+  const exactTextKeys: Record<string, string> = {
+    'Apply for a digital ID': 'scenario.description.applyDigitalId',
+    'Create family domain': 'scenario.description.createFamilyDomain',
+    'Order received, Kitchen preparing.': 'scenario.description.orderReceivedKitchenPreparing',
+    'Find courier': 'scenario.description.findCourier',
+    'Courier picking up the order': 'scenario.description.courierPickingUpOrder',
+    'Out for delivery': 'scenario.description.outForDelivery',
+    'Order completed': 'scenario.description.orderCompleted',
+    'Order Food': 'scenario.action.orderFood',
+    'Agent discovery request': 'scenario.action.agentDiscoveryRequest',
+    'Pickup and delivery': 'scenario.action.pickupAndDelivery',
+    'Pickup and delivery task dispatched to the courier robot.': 'scenario.action.pickupAndDeliveryTaskDispatched',
+    'GIS data': 'scenario.action.gisData',
+  };
+  const applyForMatch = text.match(/^Apply for a digital ID for (.+)$/i);
+  if (applyForMatch) {
+    return t(locale, 'scenario.action.applyDigitalIdFor').replace('{subject}', applyForMatch[1]);
+  }
+  const agentProfileMatch = text.match(/^Agent profile of (.+)$/i);
+  if (agentProfileMatch) {
+    return t(locale, 'scenario.action.agentProfileOf').replace('{subject}', agentProfileMatch[1]);
+  }
+  const exactKey = exactTextKeys[text];
+  return exactKey ? t(locale, exactKey) : text;
+}
+
+function getScenarioRouteLines(locale: Locale, ids: string[], matcher?: (entry: ScenarioPipelineEntry) => boolean) {
   return getScenarioPipelineEntries(ids, matcher).flatMap((entry) => {
       if (matcher && !matcher(entry)) {
         return [];
       }
       const sender = entry.sender?.trim();
       const receiver = entry.receiver?.trim();
-      const action = cleanScenarioText(entry.action, 120);
+      const action = localizeScenarioText(locale, entry.action, 120);
       if (!sender || !receiver || !action) {
         return [];
       }
@@ -321,6 +464,24 @@ function buildSection(title: string, lines: Array<string | null | undefined>): P
   return compact.length ? { title, lines: compact } : null;
 }
 
+function parseScriptString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  throw new Error(`${fieldName} must be a string.`);
+}
+
+function resolveScriptText(value: string | undefined, locale: Locale, fallback = '') {
+  return resolveTextValue(value, locale) || fallback;
+}
+
+function resolveCopy(value: string | undefined, locale: Locale, fallback = '') {
+  return resolveScriptText(value, locale, fallback);
+}
+
 function messageCard(
   title: string,
   body: string,
@@ -354,70 +515,70 @@ function agentChatCard(
   };
 }
 
-function getStageCompletionMessage(stageIndex: number): PresentationMessage | null {
+function getStageCompletionMessage(stageIndex: number, locale: Locale): PresentationMessage | null {
   switch (stageIndex) {
     case 0:
       return {
         kind: 'log',
-        title: 'Stage 1 Completed',
+        title: t(locale, 'messages.stage1Completed'),
         body: 'Family Domain is operational for `UE Assistant` and `RobotDog`.',
         icon: 'log',
         chips: ['Family Domain', 'Access VC Issued', 'U-Plane Active'],
         details: buildDetails([
-          buildSection('Summary', [
-            getScenarioDoc('state_2')?.description,
+          buildSection(t(locale, 'sections.summary'), [
+            localizeScenarioText(locale, getScenarioDoc('state_2')?.description),
             ...getScenarioUiLogLines(['state_2']),
           ]),
-          buildSection('Workflow', getScenarioRouteLines(['state_2'])),
+          buildSection(t(locale, 'sections.workflow'), getScenarioRouteLines(locale, ['state_2'])),
         ]),
       };
     case 1:
       return {
         kind: 'log',
-        title: 'Stage 2 Completed',
+        title: t(locale, 'messages.stage2Completed'),
         body: 'Courier discovered and pickup task delivered to `RobotArm(MNO B)`.',
         icon: 'log',
         chips: ['RobotArm', 'Discovery Complete', 'Pickup Dispatched'],
         details: buildDetails([
-          buildSection('Summary', [
-            getScenarioDoc('state_4')?.description,
-            getScenarioDoc('state_5')?.description,
+          buildSection(t(locale, 'sections.summary'), [
+            localizeScenarioText(locale, getScenarioDoc('state_4')?.description),
+            localizeScenarioText(locale, getScenarioDoc('state_5')?.description),
             ...getScenarioUiLogLines(['state_4', 'state_5']),
           ]),
-          buildSection('Workflow', [
-            ...getScenarioRouteLines(['state_4']),
-            ...getScenarioRouteLines(['state_5']),
+          buildSection(t(locale, 'sections.workflow'), [
+            ...getScenarioRouteLines(locale, ['state_4']),
+            ...getScenarioRouteLines(locale, ['state_5']),
           ]),
         ]),
       };
     case 2:
       return {
         kind: 'log',
-        title: 'Stage 3 Completed',
+        title: t(locale, 'messages.stage3Completed'),
         body: 'Dispatch update propagated and the courier workflow is now active.',
         icon: 'log',
         chips: ['Courier Active', 'Cross-Domain', 'Pickup In Progress'],
         details: buildDetails([
-          buildSection('Summary', [
-            getScenarioDoc('state_5')?.description,
+          buildSection(t(locale, 'sections.summary'), [
+            localizeScenarioText(locale, getScenarioDoc('state_5')?.description),
             ...getScenarioUiLogLines(['state_5']),
           ]),
-          buildSection('Workflow', getScenarioRouteLines(['state_5'])),
+          buildSection(t(locale, 'sections.workflow'), getScenarioRouteLines(locale, ['state_5'])),
         ]),
       };
     case 3:
       return {
         kind: 'log',
-        title: 'Stage 4 Completed',
+        title: t(locale, 'messages.stage4Completed'),
         body: 'Delivery complete after `RobotDog` and `RobotArm` completed peer verification.',
         icon: 'log',
         chips: ['NFC Verification', 'Task Completed'],
         details: buildDetails([
-          buildSection('Summary', [
-            getScenarioDoc('state_8')?.description,
+          buildSection(t(locale, 'sections.summary'), [
+            localizeScenarioText(locale, getScenarioDoc('state_8')?.description),
             ...getScenarioUiLogLines(['state_8']),
           ]),
-          buildSection('Workflow', getScenarioRouteLines(['state_6'])),
+          buildSection(t(locale, 'sections.workflow'), getScenarioRouteLines(locale, ['state_6'])),
         ]),
       };
     default:
@@ -427,6 +588,7 @@ function getStageCompletionMessage(stageIndex: number): PresentationMessage | nu
 
 function resolveActionScenarioMessages(
   action: FlatAction,
+  locale: Locale,
   options?: { current?: boolean; checklistPhase?: PlaybackFrame['checklistPhase'] },
 ): PresentationMessage[] {
   const ids = ACTION_SCENARIO_MAP[action.id] ?? [];
@@ -452,17 +614,17 @@ function resolveActionScenarioMessages(
             ueAssistant?.ID,
           ]),
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_1')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_1')?.description),
               ...getScenarioUiLogLines(['state_1']).slice(0, 2),
             ]),
-            buildSection('Subject', [
+            buildSection(t(locale, 'subject'), [
               `Vendor: ${robotDog?.Vendor}`,
               `Capability: ${robotDog?.Capability}`,
               `Access Domain: ${robotDog?.['Access Domain']}`,
               `Owner DID: ${ueAssistant?.ID}`,
             ]),
-            buildSection('Route', getScenarioRouteLines(['state_1'], (entry) => /Apply for a digital ID/i.test(entry.action ?? ''))),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ['state_1'], (entry) => /Apply for a digital ID/i.test(entry.action ?? ''))),
           ]),
         ),
       ];
@@ -489,17 +651,17 @@ function resolveActionScenarioMessages(
             vcId,
           ]),
           buildDetails([
-            buildSection('Summary', [
+            buildSection(t(locale, 'summary'), [
               didChat?.think,
               extractFirstMatch(didChat?.content, /Final Status:\s*\*\*([^*]+)\*\*/i),
             ]),
-            buildSection('Issued Identity', [
+            buildSection(t(locale, 'issuedIdentity'), [
               `DID: ${issuedDid}`,
               `Controller: ${didDocument?.controller}`,
               `Credential ID: ${vcId}`,
               `Valid Until: ${didCredential?.validUntil}`,
             ]),
-            buildSection('Route', getScenarioRouteLines(['state_1'], (entry) => /Apply for a digital ID|Agent profile of RobotDog/i.test(entry.action ?? ''))),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ['state_1'], (entry) => /Apply for a digital ID|Agent profile of RobotDog/i.test(entry.action ?? ''))),
           ]),
         ),
         ...(
@@ -514,12 +676,12 @@ function resolveActionScenarioMessages(
                 extractFirstMatch(didChat?.content, /Block:\s*#([^,\s]+)/i)?.replace(/^/, 'Block #'),
               ]),
               buildDetails([
-                buildSection('Agent Summary', [
+                buildSection(t(locale, 'agentSummary'), [
                   didChat?.think,
                   extractFirstMatch(didChat?.content, /\*\*Result:\*\*\s*([^*]+)\*/i),
                   extractFirstMatch(didChat?.content, /\*\*To RobotDog\(CMCC\):\*\*\s*([^*]+)\./i),
                 ]),
-                buildSection('Issued Artifacts', [
+                buildSection(t(locale, 'issuedArtifacts'), [
                   `DID: ${issuedDid}`,
                   `VC ID: ${vcId}`,
                   `Signature: ${extractFirstMatch(didChat?.content, /Signature:\s*([0-9a-zx.]+)/i)}`,
@@ -543,13 +705,13 @@ function resolveActionScenarioMessages(
                   robotDog?.['Access Domain'],
                 ]),
                 buildDetails([
-                  buildSection('Agent Card', [
+                  buildSection(t(locale, 'agentCard'), [
                     `ID: ${issuedDid}`,
                     `Vendor: ${robotDog?.Vendor}`,
                     `Capability: ${robotDog?.Capability}`,
                     `Access Domain: ${robotDog?.['Access Domain']}`,
                   ]),
-                  buildSection('Credential Payload', [
+                  buildSection(t(locale, 'credentialPayload'), [
                     `Agent Name: ${didCredential?.credentialSubject?.agentName}`,
                     `Master ID: ${didCredential?.credentialSubject?.masterID}`,
                     `Proof Type: ${didCredential?.proof?.type}`,
@@ -576,11 +738,11 @@ function resolveActionScenarioMessages(
             'Public_Within_Domain',
           ]),
           buildDetails([
-            buildSection('Summary', [
+            buildSection(t(locale, 'summary'), [
               publishChat?.think,
               extractFirstMatch(publishChat?.content, /\*\*Notification:\*\*\s*([^*]+)\./i),
             ]),
-            buildSection('Registry Data', [
+            buildSection(t(locale, 'registryData'), [
               `Subject: ${publishDid}`,
               `Visibility: Public_Within_Domain`,
               `Endpoint: ${extractFirstMatch(publishChat?.content, /access_endpoint":\s*"([^"]+)"/i)}`,
@@ -599,12 +761,12 @@ function resolveActionScenarioMessages(
                 publishIndex ? `ARDF ${publishIndex}` : undefined,
               ]),
               buildDetails([
-                buildSection('Agent Summary', [
+                buildSection(t(locale, 'agentSummary'), [
                   publishChat?.think,
                   extractFirstMatch(publishChat?.content, /\*\*Status:\*\*\s*[^|]+/i),
                   extractFirstMatch(publishChat?.content, /\*\*Task:\*\*\s*`([^`]+)`/i),
                 ]),
-                buildSection('Publication Result', [
+                buildSection(t(locale, 'publicationResult'), [
                   `Subject: ${publishDid}`,
                   `Capabilities: ${extractFirstMatch(publishChat?.content, /capabilities":\s*\[([^\]]+)\]/i)}`,
                   `Endpoint: ${extractFirstMatch(publishChat?.content, /access_endpoint":\s*"([^"]+)"/i)}`,
@@ -633,11 +795,11 @@ function resolveActionScenarioMessages(
             teid,
           ]),
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_2')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_2')?.description),
               ...getScenarioUiLogLines(['state_2']),
             ]),
-            buildSection('Workflow', getScenarioRouteLines(['state_2'])),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ['state_2'])),
           ]),
         ),
         ...(
@@ -652,11 +814,11 @@ function resolveActionScenarioMessages(
                 teid,
               ]),
               buildDetails([
-                buildSection('Agent Summary', [
+                buildSection(t(locale, 'agentSummary'), [
                   domainChat?.think,
                   extractFirstMatch(domainChat?.content, /\*\*Notification:\*\*\s*([^*]+)\./i),
                 ]),
-                buildSection('Provisioning Output', [
+                buildSection(t(locale, 'provisioningOutput'), [
                   `Domain: ${domainId}`,
                   `Proof Type: ${extractFirstMatch(domainChat?.content, /Proof_Type:\s*([A-Za-z0-9]+)/i)}`,
                   `TEID: ${teid}`,
@@ -681,11 +843,11 @@ function resolveActionScenarioMessages(
             ...getScenarioUiLogLines(ids),
           ]).slice(0, 3),
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_3')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_3')?.description),
               ...getScenarioUiLogLines(ids),
             ]),
-            buildSection('Workflow', getScenarioRouteLines(ids, (entry) => /Order Food/i.test(entry.action ?? ''))),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ids, (entry) => /Order Food/i.test(entry.action ?? ''))),
           ]),
         ),
       ];
@@ -698,11 +860,11 @@ function resolveActionScenarioMessages(
           undefined,
           ['Delivery_Robot', 'Payload >2kg', 'Range >3km'],
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_4')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_4')?.description),
               ...getScenarioUiLogLines(ids),
             ]),
-            buildSection('Workflow', getScenarioRouteLines(ids, (entry) => /Agent discovery request/i.test(entry.action ?? ''))),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ids, (entry) => /Agent discovery request/i.test(entry.action ?? ''))),
           ]),
         ),
         ...(
@@ -718,11 +880,11 @@ function resolveActionScenarioMessages(
                 extractFirstMatch(discoveryChat?.content, /\*\*Query Profile:\*\*\s*`([^`]+)`/i),
               ]),
               buildDetails([
-                buildSection('Agent Summary', [
+                buildSection(t(locale, 'agentSummary'), [
                   discoveryChat?.think,
                   extractFirstMatch(discoveryChat?.content, /\*\*Result:\*\*\s*([^*]+)\./i),
                 ]),
-                buildSection('Discovery Result', [
+                buildSection(t(locale, 'discoveryResult'), [
                   `Matched DID: ${extractFirstMatch(discoveryChat?.content, /\*\*RobotArm \((did:[^)]+)\)\*\*/i)}`,
                   `Constraints: ${extractFirstMatch(discoveryChat?.content, /\*\*Constraints:\*\*\s*`([^`]+)`/i)}`,
                   `Tier: ${extractFirstMatch(discoveryChat?.content, /Tier:\s*([A-Za-z_]+)/i)}`,
@@ -745,13 +907,13 @@ function resolveActionScenarioMessages(
                   getScenarioRobotDefinition('state_0', 'RobotArm')?.['Access Domain'],
                 ]),
                 buildDetails([
-                  buildSection('Agent Card', [
+                  buildSection(t(locale, 'agentCard'), [
                     `ID: ${getScenarioRobotDefinition('state_0', 'RobotArm')?.ID}`,
                     `Vendor: ${getScenarioRobotDefinition('state_0', 'RobotArm')?.Vendor}`,
                     `Capability: ${getScenarioRobotDefinition('state_0', 'RobotArm')?.Capability}`,
                     `Access Domain: ${getScenarioRobotDefinition('state_0', 'RobotArm')?.['Access Domain']}`,
                   ]),
-                  buildSection('Workflow', getScenarioRouteLines(ids, (entry) => /Agent card of RobotArm/i.test(entry.action ?? ''))),
+                  buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ids, (entry) => /Agent card of RobotArm/i.test(entry.action ?? ''))),
                 ]),
               ),
             ]
@@ -770,11 +932,11 @@ function resolveActionScenarioMessages(
             ...getScenarioUiLogLines(ids),
           ]),
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_5')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_5')?.description),
               ...getScenarioUiLogLines(ids),
             ]),
-            buildSection('Workflow', getScenarioRouteLines(ids, (entry) => /Pickup and delivery/i.test(entry.action ?? ''))),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ids, (entry) => /Pickup and delivery/i.test(entry.action ?? ''))),
           ]),
         ),
       ];
@@ -786,15 +948,15 @@ function resolveActionScenarioMessages(
           'message',
           undefined,
           compactLines([
-            getScenarioDoc('state_5')?.description,
+            localizeScenarioText(locale, getScenarioDoc('state_5')?.description),
             ...getScenarioUiLogLines(['state_5']),
           ]).slice(0, 3),
           buildDetails([
-            buildSection('Scenario Context', [
-              getScenarioDoc('state_5')?.description,
+            buildSection(t(locale, 'scenarioContext'), [
+              localizeScenarioText(locale, getScenarioDoc('state_5')?.description),
               ...getScenarioUiLogLines(['state_5']),
             ]),
-            buildSection('Courier Workflow', getScenarioRouteLines(['state_5'])),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ['state_5'])),
           ]),
         ),
       ];
@@ -807,10 +969,10 @@ function resolveActionScenarioMessages(
           undefined,
           ['GIS data', 'Cross-domain', 'RobotArm(MNO B)'],
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_6')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_6')?.description),
             ]),
-            buildSection('Workflow', getScenarioRouteLines(ids, (entry) => /GIS data/i.test(entry.action ?? ''))),
+            buildSection(t(locale, 'workflow'), getScenarioRouteLines(locale, ids, (entry) => /GIS data/i.test(entry.action ?? ''))),
           ]),
         ),
       ];
@@ -823,8 +985,8 @@ function resolveActionScenarioMessages(
           undefined,
           compactLines(getScenarioUiLogLines(['state_8'])),
           buildDetails([
-            buildSection('Summary', [
-              getScenarioDoc('state_8')?.description,
+            buildSection(t(locale, 'summary'), [
+              localizeScenarioText(locale, getScenarioDoc('state_8')?.description),
               ...getScenarioUiLogLines(['state_8']),
             ]),
           ]),
@@ -835,7 +997,7 @@ function resolveActionScenarioMessages(
   }
 }
 
-function buildVisiblePresentationMessages(script: DemoScript, playback: PlaybackFrame): PresentationMessage[] {
+function buildVisiblePresentationMessages(script: DemoScript, playback: PlaybackFrame, locale: Locale): PresentationMessage[] {
   if (playback.phase === 'standby' || playback.stageIndex < 0) {
     return [];
   }
@@ -853,10 +1015,10 @@ function buildVisiblePresentationMessages(script: DemoScript, playback: Playback
     .flatMap((action, index) => {
       const isCurrent = index === playback.actionIndex;
       const checklistPhase = isCurrent ? playback.checklistPhase : action.checklistTitle ? 'finished' : undefined;
-      return resolveActionScenarioMessages(action, { current: isCurrent, checklistPhase });
+      return resolveActionScenarioMessages(action, locale, { current: isCurrent, checklistPhase });
     });
   if (playback.phase === 'gate' || playback.phase === 'complete') {
-    const completionMessage = getStageCompletionMessage(playback.stageIndex);
+    const completionMessage = getStageCompletionMessage(playback.stageIndex, locale);
     if (completionMessage) {
       history.push(completionMessage);
     }
@@ -864,7 +1026,7 @@ function buildVisiblePresentationMessages(script: DemoScript, playback: Playback
   return history;
 }
 
-function deriveScenarioNarrative(ids: string[], fallbackTitle: string, fallbackBody: string) {
+function deriveScenarioNarrative(locale: Locale, ids: string[], fallbackTitle: string, fallbackBody: string) {
   const docs = getScenarioDocs(ids);
   const description = docs.map((doc) => doc.description).find((value) => typeof value === 'string' && value.trim());
   const logLines = docs.flatMap((doc) =>
@@ -875,7 +1037,7 @@ function deriveScenarioNarrative(ids: string[], fallbackTitle: string, fallbackB
   const formattedLogs = logLines.slice(0, 3).map((line) => `- ${line}`).join('\n');
   const body = fallbackBody?.trim() || formattedLogs;
   return {
-    title: description ? cleanScenarioText(description, 80) : fallbackTitle,
+    title: description ? localizeScenarioText(locale, description, 80) : fallbackTitle,
     body: body || fallbackBody,
   };
 }
@@ -930,19 +1092,17 @@ const DEFAULT_SCRIPT_YAML = `standby:
     - r-family
 stages:
   - id: stage-1
-    title: STAGE 1
+    title: "{{script.stage1.title}}"
     steps:
       - id: stage1-session-online
         kind: talk
         delayMs: 1000
         presentation:
-          title: "Bring the robot dog session online"
-          body: |
-            - **RobotDog** is now visible on the network.
-            - The device is ready to begin onboarding.
+          title: "{{script.stage1.sessionOnline.title}}"
+          body: "{{script.stage1.sessionOnline.body}}"
         bubbles:
           - node: robot-dog
-            text: "Session Online"
+            text: "{{script.stage1.sessionOnline.bubble}}"
             icon: radio
         revealNodes:
           - robot-dog
@@ -951,47 +1111,41 @@ stages:
         delayMs: 2200
         path: [phone, acn-agent]
         presentation:
-          title: "Analyse domain onboarding request"
-          body: |
-            - **AiCore** begins digital identity registration.
-            - The onboarding flow also prepares the new family domain.
+          title: "{{script.stage1.onboarding.title}}"
+          body: "{{script.stage1.onboarding.body}}"
         bubbles:
           - node: phone
-            text: "Applying for a Digital ID and Creating a Domain"
+            text: "{{script.stage1.onboarding.phoneBubble}}"
             icon: radio
           - node: acn-agent
-            text: "Making plans..."
+            text: "{{script.stage1.onboarding.agentBubble}}"
             icon: scan
       - id: stage1-checklist
         type: checklist
-        title: ACN Domain Create
+        title: "{{script.stage1.checklist.title}}"
         delayMs: 1000
         bubbleText:
-          done: "Digital ID Workflow Succeeded"
+          done: "{{script.stage1.checklist.done}}"
         presentation:
-          title: "AiCore is provisioning the family domain"
-          body: |
-            - **Identity**, **agent presence**, and **domain resources** are provisioned in sequence.
-            - Each step prepares the family workflow for service.
+          title: "{{script.stage1.checklist.presentationTitle}}"
+          body: "{{script.stage1.checklist.presentationBody}}"
         items:
           - id: stage1-apply-digital-id
             kind: talk
             path: [acn-agent, idm]
             presentation:
-              title: "Issue a digital identity"
-              body: |
-                - **Identity Management** assigns a trusted ID to **RobotDog**.
-                - The new agent identity is anchored and returned to the ACN flow.
+              title: "{{script.stage1.issueIdentity.title}}"
+              body: "{{script.stage1.issueIdentity.body}}"
             bubbleText:
-              plan: "Assign Digital ID"
-              processing: "Assigning Digital ID"
-              done: "Digital ID Assigned"
+              plan: "{{script.stage1.issueIdentity.plan}}"
+              processing: "{{script.stage1.issueIdentity.processing}}"
+              done: "{{script.stage1.issueIdentity.done}}"
             bubbles:
               - node: idm
-                text: "Digital ID Assigned: DIDI"
+                text: "{{script.stage1.issueIdentity.idmBubble}}"
                 icon: done
               - node: robot-dog
-                text: "DIDI"
+                text: "{{script.stage1.issueIdentity.robotBubble}}"
                 icon: done
             revealNodes:
               - agent-card
@@ -999,170 +1153,150 @@ stages:
             kind: talk
             path: [acn-agent, agent-gw]
             presentation:
-              title: "Publish the new agent card"
-              body: |
-                - The device identity is published as an **Agent Card**.
-                - The network can now discover and route traffic to **RobotDog**.
+              title: "{{script.stage1.publishAgentCard.title}}"
+              body: "{{script.stage1.publishAgentCard.body}}"
             bubbleText:
-              plan: "Publish Agent Card"
-              processing: "Publishing Agent Card"
-              done: "Agent Card Published"
+              plan: "{{script.stage1.publishAgentCard.plan}}"
+              processing: "{{script.stage1.publishAgentCard.processing}}"
+              done: "{{script.stage1.publishAgentCard.done}}"
             bubbles:
               - node: agent-gw
-                text: "Agent Card Added: DIDI"
+                text: "{{script.stage1.publishAgentCard.gatewayBubble}}"
                 icon: done
           - id: stage1-setup-family-domain
             kind: talk
             path: [acn-agent, up, scf]
             presentation:
-              title: "Create the family domain"
-              body: |
-                - **User-plane** and **service** functions allocate the private domain environment.
-                - Access credentials and traffic policy are provisioned together.
+              title: "{{script.stage1.familyDomain.title}}"
+              body: "{{script.stage1.familyDomain.body}}"
             bubbleText:
-              plan: "Set Up Family Domain"
-              processing: "Setting Up Family Domain"
-              done: "Family Domain Created"
+              plan: "{{script.stage1.familyDomain.plan}}"
+              processing: "{{script.stage1.familyDomain.processing}}"
+              done: "{{script.stage1.familyDomain.done}}"
             bubbles:
               - node: up
-                text: "Family Domain Created"
+                text: "{{script.stage1.familyDomain.upBubble}}"
                 icon: done
             revealNodes:
               - r-family
               - robot-dog
   - id: stage-2
-    title: STAGE 2
+    title: "{{script.stage2.title}}"
     steps:
       - id: stage2-phone-to-ordering
         kind: talk
         path: [phone, ott-ordering]
         presentation:
-          title: "Place a new order from the phone"
-          body: |
-            - The order request leaves the phone and crosses domains.
-            - It arrives at the **Ordering Agent** in the application network.
+          title: "{{script.stage2.phoneOrder.title}}"
+          body: "{{script.stage2.phoneOrder.body}}"
         bubbles:
           - node: phone
-            text: "Placing Order"
+            text: "{{script.stage2.phoneOrder.phoneBubble}}"
             icon: radio
           - node: agent-gw
-            text: "Agent protocol converted"
+            text: "{{script.stage2.phoneOrder.gatewayBubble}}"
             icon: scan
           - node: ott-ordering
-            text: "Analysing request..."
+            text: "{{script.stage2.phoneOrder.orderingBubble}}"
             icon: spinner
       - id: stage2-checklist
         type: checklist
-        title: Ordering Agent Ready for Pickup
+        title: "{{script.stage2.checklist.title}}"
         delayMs: 1000
         bubbleText:
-          done: "Order Pickup Workflow Succeeded"
+          done: "{{script.stage2.checklist.done}}"
         presentation:
-          title: "The ordering agent prepares delivery"
-          body: |
-            - The workflow discovers an available delivery robot.
-            - It then dispatches the pickup task to the selected courier.
+          title: "{{script.stage2.checklist.presentationTitle}}"
+          body: "{{script.stage2.checklist.presentationBody}}"
         items:
           - id: stage2-discover-delivery-agent
             kind: talk
             path: [ott-ordering, mno-gw]
             presentation:
-              title: "Discover a delivery agent"
-              body: |
-                - The ordering workflow searches across the partner domain.
-                - It filters for a suitable delivery robot.
+              title: "{{script.stage2.discoverDelivery.title}}"
+              body: "{{script.stage2.discoverDelivery.body}}"
             bubbleText:
-              plan: "Discover Delivery Agent"
-              processing: "Discovering Delivery Agent"
-              done: "Delivery Agent Discovered"
+              plan: "{{script.stage2.discoverDelivery.plan}}"
+              processing: "{{script.stage2.discoverDelivery.processing}}"
+              done: "{{script.stage2.discoverDelivery.done}}"
           - id: stage2-assign-delivery-task
             kind: talk
             path: [ott-ordering, mno-endpoint]
             presentation:
-              title: "Assign the delivery task"
-              body: |
-                - The selected robot receives the pickup mission.
-                - The courier prepares to act on the delivery task.
+              title: "{{script.stage2.assignDelivery.title}}"
+              body: "{{script.stage2.assignDelivery.body}}"
             bubbleText:
-              plan: "Assign Delivery Task"
-              processing: "Assigning Delivery Task"
-              done: "Delivery Task Assigned"
+              plan: "{{script.stage2.assignDelivery.plan}}"
+              processing: "{{script.stage2.assignDelivery.processing}}"
+              done: "{{script.stage2.assignDelivery.done}}"
             bubbles:
               - node: mno-endpoint
-                text: "Task Received"
+                text: "{{script.stage2.assignDelivery.endpointBubble}}"
                 icon: done
   - id: stage-3
-    title: STAGE 3
+    title: "{{script.stage3.title}}"
     steps:
       - id: stage3-notify-user
         kind: talk
         path: [ott-ordering, phone]
         presentation:
-          title: "Notify the user that dispatch succeeded"
-          body: |
-            - The phone receives the **RobotArm** identity.
-            - The order is now ready for pickup.
+          title: "{{script.stage3.notifyUser.title}}"
+          body: "{{script.stage3.notifyUser.body}}"
         bubbles:
           - node: ott-ordering
-            text: "Dispatch Confirmed: Order #1005"
+            text: "{{script.stage3.notifyUser.orderingBubble}}"
             icon: done
           - node: phone
-            text: "RobotArm Assigned for Order #1005"
+            text: "{{script.stage3.notifyUser.phoneBubble}}"
             icon: done
   - id: stage-4
-    title: STAGE 4
+    title: "{{script.stage4.title}}"
     steps:
       - id: stage4-location
         kind: talk
         path: [mno-endpoint, robot-dog]
         presentation:
-          title: "Share the delivery robot's live location"
-          body: |
-            - The delivery robot shares its live location.
-            - **RobotDog** receives the rendezvous coordinates for handoff.
+          title: "{{script.stage4.location.title}}"
+          body: "{{script.stage4.location.body}}"
         bubbles:
           - node: mno-endpoint
-            text: "My Location Is (39.9042, 116.4074)"
+            text: "{{script.stage4.location.endpointBubble}}"
             icon: radio
           - node: robot-dog
-            text: "Location Received"
+            text: "{{script.stage4.location.robotBubble}}"
             icon: done
       - id: stage4-verify
         kind: talk
         path: [mno-endpoint, robot-dog]
         presentation:
-          title: "Verify both robots before handoff"
-          body: |
-            - Both robots perform **peer digital identity** verification.
-            - The delivery can proceed securely after the check succeeds.
+          title: "{{script.stage4.verify.title}}"
+          body: "{{script.stage4.verify.body}}"
         bubbles:
           - node: mno-endpoint
-            text: "Verifying Peer Digital ID"
+            text: "{{script.stage4.verify.endpointBubble}}"
             icon: scan
           - node: robot-dog
-            text: "Verifying Peer Digital ID"
+            text: "{{script.stage4.verify.robotBubble}}"
             icon: scan
       - id: stage4-handover
         kind: talk
         delayMs: 3000
         presentation:
-          title: "The robots begin the package handoff"
-          body: |
-            - The peer identity check has succeeded.
-            - Both robots proceed with the package handoff.
+          title: "{{script.stage4.handover.title}}"
+          body: "{{script.stage4.handover.body}}"
         bubbles:
           - node: mno-endpoint
-            text: "Verified, comencing package handover!"
+            text: "{{script.stage4.handover.endpointBubble}}"
             icon: done
           - node: robot-dog
-            text: "Verified, comencing package handover!"
+            text: "{{script.stage4.handover.robotBubble}}"
             icon: done
 `;
 
 function parseDemoScript(text: string): DemoScript {
   const raw = loadYaml(text) as any;
   if (!raw || typeof raw !== 'object') {
-    throw new Error('YAML must define a demo object.');
+    throw new Error(t('en', 'errors.yamlMustDefineObject'));
   }
 
   const standby = raw.standby ?? {};
@@ -1175,7 +1309,7 @@ function parseDemoScript(text: string): DemoScript {
     },
     stages: stages.map((stage: any, stageIndex: number) => ({
       id: String(stage?.id ?? `stage-${stageIndex + 1}`),
-      title: String(stage?.title ?? `STAGE ${stageIndex + 1}`),
+      title: parseScriptString(stage?.title, `stages[${stageIndex}].title`) ?? `STAGE ${stageIndex + 1}`,
       steps: Array.isArray(stage?.steps)
         ? stage.steps.map((step: any, stepIndex: number) => normalizeStep(step, stageIndex, stepIndex))
         : [],
@@ -1188,19 +1322,19 @@ function normalizeStep(step: any, stageIndex: number, stepIndex: number): Script
     return {
       id: String(step.id ?? `stage-${stageIndex + 1}-step-${stepIndex + 1}`),
       type: 'checklist',
-      title: step.title ? String(step.title) : undefined,
+      title: parseScriptString(step.title, `stages[${stageIndex}].steps[${stepIndex}].title`),
       delayMs: typeof step.delayMs === 'number' && Number.isFinite(step.delayMs) ? step.delayMs : undefined,
       bubbleText: step.bubbleText && typeof step.bubbleText === 'object'
         ? {
-            plan: typeof step.bubbleText.plan === 'string' ? step.bubbleText.plan : undefined,
-            processing: typeof step.bubbleText.processing === 'string' ? step.bubbleText.processing : undefined,
-            done: typeof step.bubbleText.done === 'string' ? step.bubbleText.done : undefined,
+            plan: parseScriptString(step.bubbleText.plan, `stages[${stageIndex}].steps[${stepIndex}].bubbleText.plan`),
+            processing: parseScriptString(step.bubbleText.processing, `stages[${stageIndex}].steps[${stepIndex}].bubbleText.processing`),
+            done: parseScriptString(step.bubbleText.done, `stages[${stageIndex}].steps[${stepIndex}].bubbleText.done`),
           }
         : undefined,
       presentation: step.presentation && typeof step.presentation === 'object'
         ? {
-            title: typeof step.presentation.title === 'string' ? step.presentation.title : undefined,
-            body: typeof step.presentation.body === 'string' ? step.presentation.body : undefined,
+            title: parseScriptString(step.presentation.title, `stages[${stageIndex}].steps[${stepIndex}].presentation.title`),
+            body: parseScriptString(step.presentation.body, `stages[${stageIndex}].steps[${stepIndex}].presentation.body`),
           }
         : undefined,
       items: Array.isArray(step.items)
@@ -1220,10 +1354,10 @@ function normalizeTalkAction(step: any, stageIndex: number, stepIndex: number, i
     delayMs: typeof step?.delayMs === 'number' && Number.isFinite(step.delayMs) ? step.delayMs : undefined,
     bubbles: Array.isArray(step?.bubbles)
       ? step.bubbles
-          .filter((bubble: any) => bubble && typeof bubble === 'object' && typeof bubble.node === 'string' && typeof bubble.text === 'string')
+          .filter((bubble: any) => bubble && typeof bubble === 'object' && typeof bubble.node === 'string')
           .map((bubble: any) => ({
             node: bubble.node,
-            text: bubble.text,
+            text: parseScriptString(bubble.text, `stages[${stageIndex}].steps[${stepIndex}].items[${itemIndex}].bubbles.${bubble.node}.text`) ?? '',
             icon: typeof bubble.icon === 'string' ? bubble.icon as BubbleIcon : undefined,
           }))
       : undefined,
@@ -1231,15 +1365,15 @@ function normalizeTalkAction(step: any, stageIndex: number, stepIndex: number, i
     hideNodes: Array.isArray(step?.hideNodes) ? step.hideNodes.filter((value: any) => typeof value === 'string') : undefined,
     bubbleText: step?.bubbleText && typeof step.bubbleText === 'object'
       ? {
-          plan: typeof step.bubbleText.plan === 'string' ? step.bubbleText.plan : undefined,
-          processing: typeof step.bubbleText.processing === 'string' ? step.bubbleText.processing : undefined,
-          done: typeof step.bubbleText.done === 'string' ? step.bubbleText.done : undefined,
+          plan: parseScriptString(step.bubbleText.plan, `stages[${stageIndex}].steps[${stepIndex}].items[${itemIndex}].bubbleText.plan`),
+          processing: parseScriptString(step.bubbleText.processing, `stages[${stageIndex}].steps[${stepIndex}].items[${itemIndex}].bubbleText.processing`),
+          done: parseScriptString(step.bubbleText.done, `stages[${stageIndex}].steps[${stepIndex}].items[${itemIndex}].bubbleText.done`),
         }
       : undefined,
     presentation: step?.presentation && typeof step.presentation === 'object'
       ? {
-          title: typeof step.presentation.title === 'string' ? step.presentation.title : undefined,
-          body: typeof step.presentation.body === 'string' ? step.presentation.body : undefined,
+          title: parseScriptString(step.presentation.title, `stages[${stageIndex}].steps[${stepIndex}].items[${itemIndex}].presentation.title`),
+          body: parseScriptString(step.presentation.body, `stages[${stageIndex}].steps[${stepIndex}].items[${itemIndex}].presentation.body`),
         }
       : undefined,
   };
@@ -1293,8 +1427,8 @@ function checklistDisplayId(id: string) {
   return id.replace(/^stage\d+-/, '');
 }
 
-function getActionDisplayLabel(action: FlatAction) {
-  return action.presentation?.title ?? action.stepLabel ?? checklistDisplayId(action.id);
+function getActionDisplayLabel(action: FlatAction, locale: Locale) {
+  return resolveCopy(action.presentation?.title, locale, action.stepLabel ?? checklistDisplayId(action.id));
 }
 
 function getChecklistOriginNode(action: FlatAction) {
@@ -1355,6 +1489,7 @@ function createStandbyFrame(script: DemoScript): PlaybackFrame {
 
 function createIdleFrame(
   script: DemoScript,
+  locale: Locale,
   phase: 'gate' | 'paused' | 'complete',
   stageIndex: number,
   actionIndex: number,
@@ -1364,7 +1499,7 @@ function createIdleFrame(
   const nextStage = script.stages[stageIndex + 1];
   const checklistItems = stage ? flattenStage(stage).map((item) => ({
     id: item.id,
-    label: getActionDisplayLabel(item),
+    label: getActionDisplayLabel(item, locale),
     phase: (phase === 'gate' || phase === 'complete') ? 'done' as const : 'pending' as const,
   })) : [];
 
@@ -1374,8 +1509,8 @@ function createIdleFrame(
     actionIndex,
     checklistPhase: undefined,
     activeEdgeTone: undefined,
-    currentStageTitle: stage?.title,
-    nextStageTitle: nextStage?.title ?? 'Finish',
+    currentStageTitle: stage ? resolveCopy(stage.title, locale) : undefined,
+    nextStageTitle: nextStage ? resolveCopy(nextStage.title, locale) : t(locale, 'finish'),
     activeNodeIds: [],
     activeEdgeIds: [],
     activeEdgeDirections: {},
@@ -1391,6 +1526,7 @@ function createIdleFrame(
 
 function buildPlaybackFrame(
   script: DemoScript,
+  locale: Locale,
   stageIndex: number,
   actionIndex: number,
   phase: DemoPhase,
@@ -1435,7 +1571,7 @@ function buildPlaybackFrame(
           : 'pending';
     return {
       id: item.id,
-      label: getActionDisplayLabel(item),
+      label: getActionDisplayLabel(item, locale),
       phase,
     };
   });
@@ -1447,8 +1583,8 @@ function buildPlaybackFrame(
       actionIndex,
       checklistPhase: undefined,
       activeEdgeTone: undefined,
-      currentStageTitle: stage.title,
-      nextStageTitle: nextStage?.title ?? 'Finish',
+      currentStageTitle: resolveCopy(stage.title, locale),
+      nextStageTitle: nextStage ? resolveCopy(nextStage.title, locale) : t(locale, 'finish'),
       activeNodeIds: [],
       activeEdgeIds: [],
       activeEdgeDirections: {},
@@ -1478,13 +1614,14 @@ function buildPlaybackFrame(
   const checklistTargetNode = action.checklistTitle ? getChecklistTargetNode(action) : undefined;
   const checklistBubbleText = action.checklistTitle ? action.checklistBubbleText : undefined;
   const checklistCompleted = action.checklistTitle && effectiveChecklistPhase === 'checklist-finished';
-  const stepProcessingText = action.bubbleText?.processing ?? action.bubbleText?.plan ?? action.stepLabel;
-  const stepDoneText = action.bubbleText?.done ?? action.bubbleText?.processing ?? action.bubbleText?.plan ?? action.stepLabel;
+  const stepLabel = getActionDisplayLabel(action, locale);
+  const stepProcessingText = resolveCopy(action.bubbleText?.processing, locale) || resolveCopy(action.bubbleText?.plan, locale) || stepLabel;
+  const stepDoneText = resolveCopy(action.bubbleText?.done, locale) || resolveCopy(action.bubbleText?.processing, locale) || resolveCopy(action.bubbleText?.plan, locale) || stepLabel;
   const bubbles = action.checklistTitle
     ? (
         effectiveChecklistPhase === 'checklist-finished'
-          ? (checklistBubbleText?.done && checklistOriginNode
-              ? { [checklistOriginNode]: checklistBubbleText.done }
+          ? (resolveCopy(checklistBubbleText?.done, locale) && checklistOriginNode
+              ? { [checklistOriginNode]: resolveCopy(checklistBubbleText?.done, locale) }
               : {})
           : (checklistTargetNode
               ? {
@@ -1494,7 +1631,7 @@ function buildPlaybackFrame(
                 }
               : {})
       )
-    : Object.fromEntries((action.bubbles ?? []).map((bubble) => [bubble.node, bubble.text]));
+    : Object.fromEntries((action.bubbles ?? []).map((bubble) => [bubble.node, resolveCopy(bubble.text, locale)]));
   const bubbleIcons = action.checklistTitle
     ? (
         effectiveChecklistPhase === 'checklist-finished'
@@ -1539,13 +1676,13 @@ function buildPlaybackFrame(
     actionId: action.id,
     checklistPhase: effectiveChecklistPhase,
     activeEdgeTone: action.kind === 'talk' ? '#7c3aed' : '#10b981',
-    currentStageTitle: stage.title,
-    nextStageTitle: nextStage?.title ?? 'Finish',
+    currentStageTitle: resolveCopy(stage.title, locale),
+    nextStageTitle: nextStage ? resolveCopy(nextStage.title, locale) : t(locale, 'finish'),
     currentStepLabel: action.checklistTitle
       ? effectiveChecklistPhase === 'checklist-finished'
-        ? `Checklist finished: ${action.checklistTitle}`
-        : `${effectiveChecklistPhase === 'finished' ? 'Finished' : 'Processing'}: ${getActionDisplayLabel(action)}`
-      : getActionDisplayLabel(action),
+        ? `${t(locale, 'checklistFinished')}: ${resolveCopy(action.checklistTitle, locale)}`
+        : `${effectiveChecklistPhase === 'finished' ? t(locale, 'done') : t(locale, 'processing')}: ${stepLabel}`
+      : stepLabel,
     activeNodeIds,
     activeEdgeIds: action.checklistTitle && effectiveChecklistPhase === 'checklist-finished' ? [] : edgeIds,
     activeEdgeDirections: action.checklistTitle && effectiveChecklistPhase === 'checklist-finished' ? {} : activeEdgeDirections,
@@ -1556,7 +1693,7 @@ function buildPlaybackFrame(
     bubbleIcons,
     planBubble: action.checklistTitle && !checklistCompleted ? {
       nodeId: checklistOriginNode ?? action.id,
-      title: action.checklistTitle,
+      title: resolveCopy(action.checklistTitle, locale),
       items: checklistGroup.map((item, index) => {
         const phase: 'pending' | 'processing' | 'done' =
           index < currentChecklistIndex
@@ -1566,13 +1703,13 @@ function buildPlaybackFrame(
               : 'pending';
         return {
           id: item.id,
-          label: getActionDisplayLabel(item),
+          label: getActionDisplayLabel(item, locale),
           phase,
           bubbleText: phase === 'processing'
-            ? item.bubbleText?.processing ?? item.bubbleText?.plan ?? getActionDisplayLabel(item)
+            ? resolveCopy(item.bubbleText?.processing, locale) || resolveCopy(item.bubbleText?.plan, locale) || getActionDisplayLabel(item, locale)
             : phase === 'done'
-              ? item.bubbleText?.done ?? item.bubbleText?.processing ?? item.bubbleText?.plan ?? getActionDisplayLabel(item)
-              : item.bubbleText?.plan ?? getActionDisplayLabel(item),
+              ? resolveCopy(item.bubbleText?.done, locale) || resolveCopy(item.bubbleText?.processing, locale) || resolveCopy(item.bubbleText?.plan, locale) || getActionDisplayLabel(item, locale)
+              : resolveCopy(item.bubbleText?.plan, locale) || getActionDisplayLabel(item, locale),
         };
       }),
     } : undefined,
@@ -1594,66 +1731,68 @@ function resolveChecklistProcessingDelay(action?: FlatAction) {
   return Math.max(0, action.delayMs);
 }
 
-function buildFinalDeliveryPresentation(messages: PresentationMessage[]) {
+function buildFinalDeliveryPresentation(messages: PresentationMessage[], locale: Locale) {
   return {
-    title: 'Delivery completed successfully',
-    body: '- **RobotDog** and **RobotArm** completed peer verification.\n- The handoff finished and the task is now closed.',
+    title: t(locale, 'finalTitle'),
+    body: t(locale, 'finalBody'),
     messages,
   };
 }
 
-function getFixedStageSummaryTitle(stageIndex: number) {
+function getFixedStageSummaryTitle(stageIndex: number, locale: Locale) {
   switch (stageIndex) {
     case 0:
-      return 'Onboard Family Domain';
+      return t(locale, 'stage0Summary');
     case 1:
-      return 'Discover And Assign Courier';
+      return t(locale, 'stage1Summary');
     case 2:
-      return 'Notify And Coordinate Delivery';
+      return t(locale, 'stage2Summary');
     case 3:
-      return 'Verify And Close Handoff';
+      return t(locale, 'stage3Summary');
     default:
       return `Stage ${stageIndex + 1}`;
   }
 }
 
-function getStageNarrativeSnapshot(script: DemoScript, stageIndex: number) {
+function getStageNarrativeSnapshot(script: DemoScript, stageIndex: number, locale: Locale) {
   const stage = script.stages[stageIndex];
   if (!stage) {
-    return { title: 'Narrative unavailable', body: '' };
+    return { title: t(locale, 'narrativeUnavailable'), body: '' };
   }
   const firstAction = flattenStage(stage)[0];
   if (stageIndex === 0) {
     return {
-      title: 'Family domain created and ready',
-      body: '- **Family Domain** is now active.\n- Members: **UE Assistant** and **RobotDog**.\n- Domain ID: `4sg520s2.acn.domain.cmcc`.',
+      title: t(locale, 'stage0GateTitle'),
+      body: t(locale, 'stage0GateBody'),
     };
   }
   if (stageIndex === 1) {
     return {
-      title: 'Courier discovered and pickup assigned',
-      body: '- **RobotArm** has been selected as the courier.\n- The pickup task has been delivered across both gateways.',
+      title: t(locale, 'stage1GateTitle'),
+      body: t(locale, 'stage1GateBody'),
     };
   }
   if (stageIndex === 2) {
     return {
-      title: 'User notified and delivery is underway',
-      body: '- The phone has received the **RobotArm** identity.\n- The delivery workflow is now moving into live coordination.',
+      title: t(locale, 'stage2GateTitle'),
+      body: t(locale, 'stage2GateBody'),
     };
   }
   if (stageIndex === 3) {
-    return buildFinalDeliveryPresentation([]);
+    return buildFinalDeliveryPresentation([], locale);
   }
   const scenarioIds = firstAction ? (ACTION_SCENARIO_MAP[firstAction.id] ?? STAGE_SCENARIO_MAP[stageIndex] ?? []) : (STAGE_SCENARIO_MAP[stageIndex] ?? []);
   return deriveScenarioNarrative(
+    locale,
     scenarioIds,
-    firstAction?.presentation?.title ?? stage.title,
-    firstAction?.presentation?.body ?? `- **Current step:** ${firstAction?.stepLabel ?? stage.title}`,
+    resolveCopy(firstAction?.presentation?.title, locale, resolveCopy(stage.title, locale)),
+    resolveCopy(firstAction?.presentation?.body, locale, `- **${t(locale, 'currentStep')}:** ${firstAction?.stepLabel ?? resolveCopy(stage.title, locale)}`),
   );
 }
 
 function deriveNarrativeStageSummaries(
   script: DemoScript,
+  locale: Locale,
   playback: PlaybackFrame,
   presentationCard: { title: string; body: string; messages: PresentationMessage[] },
 ): NarrativeStageSummary[] {
@@ -1670,7 +1809,7 @@ function deriveNarrativeStageSummaries(
       }
     }
 
-    const fallbackSnapshot = getStageNarrativeSnapshot(script, index);
+    const fallbackSnapshot = getStageNarrativeSnapshot(script, index, locale);
     const body = index === playback.stageIndex && playback.phase !== 'standby'
       ? presentationCard.body
       : fallbackSnapshot.body;
@@ -1678,13 +1817,13 @@ function deriveNarrativeStageSummaries(
       ? playback.checklistItems
       : stageActions.map((action) => ({
           id: action.id,
-          label: getActionDisplayLabel(action),
+          label: getActionDisplayLabel(action, locale),
           phase: status === 'done' ? 'done' as const : 'pending' as const,
         }));
 
     return {
       id: stage.id,
-      summaryTitle: getFixedStageSummaryTitle(index),
+      summaryTitle: getFixedStageSummaryTitle(index, locale),
       status,
       body,
       items,
@@ -1694,29 +1833,31 @@ function deriveNarrativeStageSummaries(
 
 function derivePresentationCard(
   script: DemoScript,
+  locale: Locale,
   playback: PlaybackFrame,
   activeAction?: FlatAction,
 ): { title: string; body: string; messages: PresentationMessage[] } {
   const stage = script.stages[playback.stageIndex];
-  const stageTitle = stage?.title ?? 'Demo';
-  const messages = buildVisiblePresentationMessages(script, playback);
+  const stageTitle = stage ? resolveCopy(stage.title, locale) : t(locale, 'demo');
+  const messages = buildVisiblePresentationMessages(script, playback, locale);
 
   if (playback.phase === 'standby') {
     return {
-      title: 'Connect robots and place an order',
-      body: '- **Phone** and **RobotArm** are already online.\n- Both devices are registered and ready for the next workflow.\n- Start onboarding a robot or issue a new delivery request.',
+      title: t(locale, 'standbyTitle'),
+      body: t(locale, 'standbyBody'),
       messages: [],
     };
   }
 
   if (playback.phase === 'complete') {
     if (playback.stageIndex === 3) {
-      return buildFinalDeliveryPresentation(messages);
+      return buildFinalDeliveryPresentation(messages, locale);
     }
     const narrative = deriveScenarioNarrative(
+      locale,
       ['state_8'],
-      'The autonomous delivery workflow is complete',
-      '- **Identity**, **domain creation**, **dispatch**, **location sharing**, and **peer verification** all completed successfully.',
+      t(locale, 'workflowCompleteTitle'),
+      t(locale, 'workflowCompleteBody'),
     );
     return { ...narrative, messages };
   }
@@ -1724,32 +1865,33 @@ function derivePresentationCard(
   if (playback.phase === 'gate') {
     if (playback.stageIndex === 0) {
       return {
-        title: 'Family domain created and ready',
-        body: '- **Family Domain** is now active.\n- Members: **UE Assistant** and **RobotDog**.\n- Domain ID: `4sg520s2.acn.domain.cmcc`.',
+        title: t(locale, 'stage0GateTitle'),
+        body: t(locale, 'stage0GateBody'),
         messages,
       };
     }
     if (playback.stageIndex === 1) {
       return {
-        title: 'Courier discovered and pickup assigned',
-        body: '- **RobotArm** has been selected as the courier.\n- The pickup task has been delivered across both gateways.',
+        title: t(locale, 'stage1GateTitle'),
+        body: t(locale, 'stage1GateBody'),
         messages,
       };
     }
     if (playback.stageIndex === 2) {
       return {
-        title: 'User notified and delivery is underway',
-        body: '- The phone has received the **RobotArm** identity.\n- The delivery workflow is now moving into live coordination.',
+        title: t(locale, 'stage2GateTitle'),
+        body: t(locale, 'stage2GateBody'),
         messages,
       };
     }
     if (playback.stageIndex === 3) {
-      return buildFinalDeliveryPresentation(messages);
+      return buildFinalDeliveryPresentation(messages, locale);
     }
     const narrative = deriveScenarioNarrative(
+      locale,
       STAGE_SCENARIO_MAP[playback.stageIndex] ?? [],
-      `${stageTitle} is complete`,
-      '- The demonstration is ready to proceed to the next narrative moment.',
+      `${stageTitle} ${t(locale, 'stageCompleteFallback')}`,
+      t(locale, 'nextNarrativeMoment'),
     );
     return { ...narrative, messages };
   }
@@ -1757,16 +1899,17 @@ function derivePresentationCard(
   if (activeAction) {
     const scenarioIds = ACTION_SCENARIO_MAP[activeAction.id] ?? STAGE_SCENARIO_MAP[playback.stageIndex] ?? [];
     const narrative = deriveScenarioNarrative(
+      locale,
       scenarioIds,
-      activeAction.presentation?.title ?? activeAction.stepLabel,
-      activeAction.presentation?.body ?? activeAction.bubbleText?.processing ?? activeAction.stepLabel,
+      resolveCopy(activeAction.presentation?.title, locale, activeAction.stepLabel),
+      resolveCopy(activeAction.presentation?.body, locale, resolveCopy(activeAction.bubbleText?.processing, locale, activeAction.stepLabel)),
     );
     return { ...narrative, messages };
   }
 
   return {
     title: stageTitle,
-    body: `- **Current step:** ${playback.currentStepLabel ?? 'The live workflow is progressing through the current stage.'}`,
+    body: `- **${t(locale, 'currentStep')}:** ${playback.currentStepLabel ?? t(locale, 'currentStepFallback')}`,
     messages,
   };
 }
@@ -2007,14 +2150,15 @@ function CmccLogo() {
 
 function Dashboard() {
   const initialDebugMode = getInitialDebugMode();
+  const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
   const [debugMode, setDebugMode] = useState(initialDebugMode);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scriptText, setScriptText] = useState(DEFAULT_SCRIPT_YAML);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [scriptDoc, setScriptDoc] = useState<DemoScript>(() => parseDemoScript(DEFAULT_SCRIPT_YAML));
   const [playback, setPlayback] = useState<PlaybackFrame>(() => createStandbyFrame(parseDemoScript(DEFAULT_SCRIPT_YAML)));
-  const [nodes, setNodes] = useState<Node[]>(() => buildGraph(scriptDoc, playback).nodes);
-  const [edges, setEdges] = useState<Edge[]>(() => buildGraph(scriptDoc, playback).edges);
+  const [nodes, setNodes] = useState<Node[]>(() => buildGraph(scriptDoc, playback, locale).nodes);
+  const [edges, setEdges] = useState<Edge[]>(() => buildGraph(scriptDoc, playback, locale).edges);
   const [transitioningNodeIds, setTransitioningNodeIds] = useState<string[]>([]);
   const [transitioningEdgeIds, setTransitioningEdgeIds] = useState<string[]>([]);
   const [transitioningBubbles, setTransitioningBubbles] = useState<Record<string, RetainedBubble>>({});
@@ -2027,6 +2171,7 @@ function Dashboard() {
   const [backendResetPending, setBackendResetPending] = useState(false);
   const [lastBackendPollAt, setLastBackendPollAt] = useState<number | null>(null);
   const [canvasViewport, setCanvasViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
+  const [graphFontScale, setGraphFontScale] = useState(() => getInitialGraphFontScale());
   const [backendEnabled, setBackendEnabled] = useState(() => !initialDebugMode);
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<PresentationMessage | null>(null);
@@ -2047,6 +2192,7 @@ function Dashboard() {
   }>({ nodeIds: [], edgeIds: [], bubbles: {}, planBubble: undefined });
   const transitionTimerRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
+  const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
 
   useEffect(() => {
     scriptRef.current = scriptDoc;
@@ -2073,6 +2219,7 @@ function Dashboard() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(DEBUG_MODE_STORAGE_KEY, String(debugMode));
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
     }
     if (debugMode && !previousDebugModeRef.current) {
       setBackendEnabled(false);
@@ -2084,7 +2231,13 @@ function Dashboard() {
       setBackendError(null);
     }
     previousDebugModeRef.current = debugMode;
-  }, [debugMode]);
+  }, [debugMode, locale]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(GRAPH_FONT_SCALE_STORAGE_KEY, String(graphFontScale));
+    }
+  }, [graphFontScale]);
 
   useEffect(() => {
     if (!settingsOpen) {
@@ -2190,9 +2343,9 @@ function Dashboard() {
       setScriptError(null);
       setPlayback(createStandbyFrame(parsed));
     } catch (error) {
-      setScriptError(error instanceof Error ? error.message : 'Unable to parse YAML.');
+      setScriptError(error instanceof Error ? error.message : t(locale, 'parseYamlError'));
     }
-  }, []);
+  }, [locale]);
 
   const getActionsForStage = useCallback((script: DemoScript, stageIndex: number) => {
     const stage = script.stages[stageIndex];
@@ -2210,6 +2363,33 @@ function Dashboard() {
     setBackendConnected(false);
   }, []);
 
+  const adjustZoom = useCallback((direction: 1 | -1) => {
+    const instance = reactFlowRef.current;
+    if (!instance) {
+      return;
+    }
+    const currentZoom = instance.getZoom();
+    const nextZoom = direction > 0 ? currentZoom * GRAPH_ZOOM_STEP : currentZoom / GRAPH_ZOOM_STEP;
+    void instance.zoomTo(
+      Math.min(MAX_GRAPH_ZOOM, Math.max(MIN_GRAPH_ZOOM, nextZoom)),
+      { duration: 120 },
+    );
+  }, []);
+
+  const handleCanvasWheel = useCallback((event: React.WheelEvent<HTMLElement>) => {
+    const instance = reactFlowRef.current;
+    if (!instance) {
+      return;
+    }
+    event.preventDefault();
+    const currentZoom = instance.getZoom();
+    const nextZoom = event.deltaY < 0 ? currentZoom * GRAPH_ZOOM_STEP : currentZoom / GRAPH_ZOOM_STEP;
+    void instance.zoomTo(
+      Math.min(MAX_GRAPH_ZOOM, Math.max(MIN_GRAPH_ZOOM, nextZoom)),
+      { duration: 60 },
+    );
+  }, []);
+
   const updatePlayback = useCallback((mode: 'start' | 'continue' | 'timer' | 'pause' | 'reset' | 'next-step' | 'previous-step') => {
     clearTimer();
     setPlayback((prev) => {
@@ -2219,7 +2399,7 @@ function Dashboard() {
       }
       if (mode === 'pause') {
         return prev.phase === 'running'
-          ? createIdleFrame(script, 'paused', prev.stageIndex, prev.actionIndex, prev.revealedNodeIds)
+          ? createIdleFrame(script, locale, 'paused', prev.stageIndex, prev.actionIndex, prev.revealedNodeIds)
           : prev;
       }
       if (mode === 'previous-step') {
@@ -2229,6 +2409,7 @@ function Dashboard() {
         }
         return buildPlaybackFrame(
           script,
+          locale,
           previousCursor.stageIndex,
           previousCursor.actionIndex,
           'paused',
@@ -2239,10 +2420,11 @@ function Dashboard() {
       if (mode === 'next-step') {
         const nextCursor = findNextCursor(script, prev.stageIndex, prev.actionIndex);
         if (!nextCursor) {
-          return createIdleFrame(script, 'complete', prev.stageIndex, prev.actionIndex, prev.revealedNodeIds);
+          return createIdleFrame(script, locale, 'complete', prev.stageIndex, prev.actionIndex, prev.revealedNodeIds);
         }
         return buildPlaybackFrame(
           script,
+          locale,
           nextCursor.stageIndex,
           nextCursor.actionIndex,
           'paused',
@@ -2260,7 +2442,7 @@ function Dashboard() {
         if (script.stages.length === 0) {
           return createStandbyFrame(script);
         }
-        return buildPlaybackFrame(script, 0, 0, 'running', [], undefined);
+        return buildPlaybackFrame(script, locale, 0, 0, 'running', [], undefined);
       }
       if (mode === 'continue') {
         if (prev.phase !== 'gate') {
@@ -2268,9 +2450,9 @@ function Dashboard() {
         }
         const nextStageIndex = prev.stageIndex + 1;
         if (nextStageIndex >= script.stages.length) {
-          return createIdleFrame(script, 'complete', prev.stageIndex, prev.actionIndex, prev.revealedNodeIds);
+          return createIdleFrame(script, locale, 'complete', prev.stageIndex, prev.actionIndex, prev.revealedNodeIds);
         }
-        return buildPlaybackFrame(script, nextStageIndex, 0, 'running', prev.revealedNodeIds, undefined);
+        return buildPlaybackFrame(script, locale, nextStageIndex, 0, 'running', prev.revealedNodeIds, undefined);
       }
       if (prev.phase !== 'running') {
         return prev;
@@ -2280,29 +2462,29 @@ function Dashboard() {
       const revealed = applyActionVisibility(prev.revealedNodeIds, currentAction);
       if (currentAction?.checklistTitle) {
         if (prev.checklistPhase === 'processing' || prev.checklistPhase === undefined) {
-          return buildPlaybackFrame(script, prev.stageIndex, prev.actionIndex, 'running', revealed, 'finished');
+          return buildPlaybackFrame(script, locale, prev.stageIndex, prev.actionIndex, 'running', revealed, 'finished');
         }
         if (prev.checklistPhase === 'finished') {
           const checklistGroup = getChecklistGroup(actions, currentAction);
           const currentChecklistIndex = checklistGroup.findIndex((item) => item.id === currentAction.id);
           const isFinalChecklistItem = currentChecklistIndex >= 0 && currentChecklistIndex === checklistGroup.length - 1;
           if (isFinalChecklistItem) {
-            return buildPlaybackFrame(script, prev.stageIndex, prev.actionIndex, 'running', revealed, 'checklist-finished');
+            return buildPlaybackFrame(script, locale, prev.stageIndex, prev.actionIndex, 'running', revealed, 'checklist-finished');
           }
           const nextActionIndex = prev.actionIndex + 1;
           if (nextActionIndex < actions.length) {
-            return buildPlaybackFrame(script, prev.stageIndex, nextActionIndex, 'running', revealed, 'processing');
+            return buildPlaybackFrame(script, locale, prev.stageIndex, nextActionIndex, 'running', revealed, 'processing');
           }
-          return createIdleFrame(script, 'gate', prev.stageIndex, prev.actionIndex, revealed);
+          return createIdleFrame(script, locale, 'gate', prev.stageIndex, prev.actionIndex, revealed);
         }
       }
       const nextActionIndex = prev.actionIndex + 1;
       if (nextActionIndex < actions.length) {
-        return buildPlaybackFrame(script, prev.stageIndex, nextActionIndex, 'running', revealed, undefined);
+        return buildPlaybackFrame(script, locale, prev.stageIndex, nextActionIndex, 'running', revealed, undefined);
       }
-      return createIdleFrame(script, 'gate', prev.stageIndex, prev.actionIndex, revealed);
+      return createIdleFrame(script, locale, 'gate', prev.stageIndex, prev.actionIndex, revealed);
     });
-  }, [clearTimer, getActionsForStage]);
+  }, [clearTimer, getActionsForStage, locale]);
 
   const fetchBackendStage = useCallback(async () => {
     if (!backendEnabled || !backendEndpoint || pollInFlightRef.current) {
@@ -2325,7 +2507,7 @@ function Dashboard() {
       setLastBackendPollAt(Date.now());
     } catch (error) {
       setBackendConnected(false);
-      setBackendError(error instanceof Error ? error.message : 'Unable to fetch backend status.');
+      setBackendError(error instanceof Error ? error.message : t(locale, 'backendStatusError'));
     } finally {
       pollInFlightRef.current = false;
     }
@@ -2356,20 +2538,20 @@ function Dashboard() {
       updatePlayback('reset');
     } catch (error) {
       setBackendConnected(false);
-      setBackendError(error instanceof Error ? error.message : 'Unable to reset backend.');
+      setBackendError(error instanceof Error ? error.message : t(locale, 'backendResetError'));
     } finally {
       setBackendResetPending(false);
     }
   }, [backendEnabled, backendEndpoint, backendResetPending, updatePlayback]);
 
   useEffect(() => {
-    const graph = buildGraph(scriptDoc, playback, transitioningNodeIds, transitioningEdgeIds, transitioningBubbles, transitioningPlans);
+    const graph = buildGraph(scriptDoc, playback, locale, transitioningNodeIds, transitioningEdgeIds, transitioningBubbles, transitioningPlans);
     setNodes((prev) => graph.nodes.map((node) => {
       const previous = prev.find((candidate) => candidate.id === node.id);
       return previous ? { ...node, position: previous.position } : node;
     }));
     setEdges(graph.edges);
-  }, [playback, scriptDoc, transitioningBubbles, transitioningEdgeIds, transitioningNodeIds, transitioningPlans]);
+  }, [locale, playback, scriptDoc, transitioningBubbles, transitioningEdgeIds, transitioningNodeIds, transitioningPlans]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -2442,15 +2624,29 @@ function Dashboard() {
     }
   }, [backendEnabled, backendStage, playback.phase, playback.stageIndex, scriptDoc.stages.length, updatePlayback]);
 
-  const savedBackendDisplay = backendEndpoint || 'Not configured';
+  useEffect(() => {
+    setPlayback((prev) => {
+      if (prev.phase === 'standby') {
+        return createStandbyFrame(scriptDoc);
+      }
+      if (prev.phase === 'paused' || prev.phase === 'gate' || prev.phase === 'complete') {
+        return createIdleFrame(scriptDoc, locale, prev.phase, prev.stageIndex, prev.actionIndex, prev.revealedNodeIds);
+      }
+      return buildPlaybackFrame(scriptDoc, locale, prev.stageIndex, prev.actionIndex, prev.phase, prev.revealedNodeIds, prev.checklistPhase);
+    });
+  }, [locale, scriptDoc]);
+
+  const savedBackendDisplay = backendEndpoint || t(locale, 'notConfigured');
   const viewportDisplay = `x ${Math.round(canvasViewport.x)}, y ${Math.round(canvasViewport.y)}, z ${canvasViewport.zoom.toFixed(2)}`;
+  const graphFontScalePercent = Math.round(graphFontScale * 100);
+  const graphFontScaleDisplay = t(locale, 'graphTextScaleValue').replace('{percent}', String(graphFontScalePercent));
   const playbackControlTitle = playback.phase === 'running'
-    ? 'Pause'
+    ? t(locale, 'pause')
     : playback.phase === 'gate'
-      ? 'Continue'
-      : 'Start';
-  const presentationCard = derivePresentationCard(scriptDoc, playback, activeAction);
-  const narrativeStages = deriveNarrativeStageSummaries(scriptDoc, playback, presentationCard);
+      ? t(locale, 'continue')
+      : t(locale, 'start');
+  const presentationCard = derivePresentationCard(scriptDoc, locale, playback, activeAction);
+  const narrativeStages = deriveNarrativeStageSummaries(scriptDoc, locale, playback, presentationCard);
   const currentNarrativeTitle = presentationCard.title;
 
   useEffect(() => {
@@ -2485,13 +2681,13 @@ function Dashboard() {
         <div className="header-left">
           <div className="dashboard-brand">
             <CmccLogo />
-            <h1 className="dashboard-title">AICore Dashboard</h1>
+            <h1 className="dashboard-title">{t(locale, 'appTitle')}</h1>
           </div>
         </div>
         <div className="header-right">
           <div className="control-group">
             <StatusBadge
-              label={!backendEnabled || backendConnected ? 'Live' : 'Disconnected'}
+              label={!backendEnabled || backendConnected ? t(locale, 'live') : t(locale, 'disconnected')}
               tone={!backendEnabled || backendConnected ? 'good' : 'idle'}
               icon={!backendEnabled || backendConnected ? <span className="status-live-dot" /> : <WifiOff size={13} />}
             />
@@ -2505,20 +2701,37 @@ function Dashboard() {
               >
                 {playback.phase === 'running' ? <Square size={14} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
               </button>
-              <button className="icon-button" onClick={() => updatePlayback('previous-step')} title="Previous Step"><SkipBack size={16} /></button>
-              <button className="icon-button" onClick={() => updatePlayback('next-step')} title="Next Step"><SkipForward size={16} /></button>
+              <button className="icon-button" onClick={() => updatePlayback('previous-step')} title={t(locale, 'previousStep')}><SkipBack size={16} /></button>
+              <button className="icon-button" onClick={() => updatePlayback('next-step')} title={t(locale, 'nextStep')}><SkipForward size={16} /></button>
             </div>
           )}
           <div className="control-group">
+            <button className="icon-button" onClick={() => adjustZoom(-1)} title="Zoom out">
+              <Minus size={16} />
+            </button>
+            <button className="icon-button" onClick={() => adjustZoom(1)} title="Zoom in">
+              <Plus size={16} />
+            </button>
             <div className="settings-popout-anchor" ref={settingsPopoutRef}>
-              <button className="icon-button" onClick={() => setSettingsOpen((open) => !open)} title="Settings" aria-expanded={settingsOpen}>
+              <button className="icon-button" onClick={() => setSettingsOpen((open) => !open)} title={t(locale, 'settings')} aria-expanded={settingsOpen}>
                 <Settings size={16} />
               </button>
               {settingsOpen && (
                 <div className="settings-popout">
-                  <div className="settings-popout-title">Settings</div>
+                  <div className="settings-popout-title">{t(locale, 'settings')}</div>
                   <label className="settings-field">
-                    <span className="settings-label">Backend Endpoint</span>
+                    <span className="settings-label">{t(locale, 'locale')}</span>
+                    <select
+                      className="settings-input"
+                      value={locale}
+                      onChange={(event) => setLocale(event.target.value as Locale)}
+                    >
+                      <option value="en">{t(locale, 'english')}</option>
+                      <option value="zh-CN">{t(locale, 'chinese')}</option>
+                    </select>
+                  </label>
+                  <label className="settings-field">
+                    <span className="settings-label">{t(locale, 'backendEndpoint')}</span>
                     <input
                       className="settings-input"
                       value={backendEndpointDraft}
@@ -2527,28 +2740,43 @@ function Dashboard() {
                       spellCheck={false}
                     />
                   </label>
+                  <label className="settings-field">
+                    <span className="settings-label">{t(locale, 'graphTextSize')}</span>
+                    <div className="settings-range-row">
+                      <input
+                        className="settings-range-input"
+                        type="range"
+                        min={MIN_GRAPH_FONT_SCALE}
+                        max={MAX_GRAPH_FONT_SCALE}
+                        step={0.05}
+                        value={graphFontScale}
+                        onChange={(event) => setGraphFontScale(Number.parseFloat(event.target.value))}
+                      />
+                      <span className="settings-range-value">{graphFontScaleDisplay}</span>
+                    </div>
+                  </label>
                   <div className="settings-switch-stack">
                     <label className="settings-field settings-switch-field">
-                      <span className="settings-label">Debug Mode</span>
+                      <span className="settings-label">{t(locale, 'debugMode')}</span>
                       <button
                         type="button"
                         className={cn('settings-switch', debugMode && 'settings-switch-active')}
                         onClick={() => setDebugMode((enabled) => !enabled)}
                         aria-pressed={debugMode}
-                        title={debugMode ? 'Disable debug mode' : 'Enable debug mode'}
+                        title={t(locale, 'debugMode')}
                       >
                         <span className="settings-switch-thumb" />
                       </button>
                     </label>
                     {debugMode && (
                       <label className="settings-field settings-switch-field">
-                        <span className="settings-label">Backend</span>
+                        <span className="settings-label">{t(locale, 'backend')}</span>
                         <button
                           type="button"
                           className={cn('settings-switch', backendEnabled && 'settings-switch-active')}
                           onClick={() => setBackendEnabled((enabled) => !enabled)}
                           aria-pressed={backendEnabled}
-                          title={backendEnabled ? 'Disable backend' : 'Enable backend'}
+                          title={t(locale, 'backend')}
                         >
                           <span className="settings-switch-thumb" />
                         </button>
@@ -2556,14 +2784,14 @@ function Dashboard() {
                     )}
                   </div>
                   <div className="settings-actions">
-                    <button className="primary-button settings-button" onClick={() => persistBackendEndpoint(backendEndpointDraft)}>Save</button>
+                    <button className="primary-button settings-button" onClick={() => persistBackendEndpoint(backendEndpointDraft)}>{t(locale, 'save')}</button>
                   </div>
                   <div className="settings-status">
-                    <StatItem label="Saved" value={savedBackendDisplay} />
-                    <StatItem label="Stage" value={String(backendStage)} />
-                    <StatItem label="Poll" value={!backendEnabled ? 'Ignored' : backendConnected ? 'Connected' : 'Disconnected'} />
-                    <StatItem label="Updated" value={lastBackendPollAt ? new Date(lastBackendPollAt).toLocaleTimeString() : 'Never'} />
-                    <StatItem label="Canvas" value={viewportDisplay} />
+                    <StatItem label={t(locale, 'saved')} value={savedBackendDisplay} />
+                    <StatItem label={t(locale, 'stage')} value={String(backendStage)} />
+                    <StatItem label={t(locale, 'poll')} value={!backendEnabled ? t(locale, 'ignored') : backendConnected ? t(locale, 'connected') : t(locale, 'disconnected')} />
+                    <StatItem label={t(locale, 'updated')} value={lastBackendPollAt ? new Date(lastBackendPollAt).toLocaleTimeString(locale) : t(locale, 'never')} />
+                    <StatItem label={t(locale, 'canvas')} value={viewportDisplay} />
                   </div>
                   {backendError && <div className="script-error">{backendError}</div>}
                   {debugMode && (
@@ -2573,7 +2801,7 @@ function Dashboard() {
                           type="button"
                           className="icon-button"
                           onClick={() => setScriptPanelOpen((open) => !open)}
-                          title={scriptPanelOpen ? 'Hide script' : 'Show script'}
+                          title={scriptPanelOpen ? t(locale, 'hideScript') : t(locale, 'showScript')}
                           aria-expanded={scriptPanelOpen}
                         >
                           <Ellipsis size={16} />
@@ -2595,14 +2823,18 @@ function Dashboard() {
                 </div>
               )}
             </div>
-            <button className="icon-button" onClick={() => void resetBackend()} disabled={backendResetPending} title="Reset">
+            <button className="icon-button" onClick={() => void resetBackend()} disabled={backendResetPending} title={t(locale, 'reset')}>
               <RotateCcw size={16} />
             </button>
           </div>
         </div>
       </header>
       <main className={cn("dashboard-main", sidebarCollapsed && "dashboard-main-sidebar-collapsed")}>
-        <section className="canvas-area">
+        <section
+          className="canvas-area"
+          onWheel={handleCanvasWheel}
+          style={{ '--graph-font-scale': String(graphFontScale) } as CSSProperties}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -2610,13 +2842,18 @@ function Dashboard() {
             edgeTypes={{ mission: MissionEdge }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onInit={(instance) => setCanvasViewport(instance.getViewport())}
+            onInit={(instance) => {
+              reactFlowRef.current = instance;
+              setCanvasViewport(instance.getViewport());
+            }}
             onMove={(_, viewport) => setCanvasViewport(viewport)}
             defaultViewport={DEFAULT_VIEWPORT}
             nodesConnectable={false}
             nodesDraggable={false}
             panOnDrag
-            zoomOnScroll
+            minZoom={MIN_GRAPH_ZOOM}
+            maxZoom={MAX_GRAPH_ZOOM}
+            zoomOnScroll={false}
             onlyRenderVisibleElements
             proOptions={{ hideAttribution: true }}
           >
@@ -2628,14 +2865,14 @@ function Dashboard() {
             type="button"
             className="sidebar-collapse-button"
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            title={sidebarCollapsed ? "Expand narrative tray" : "Collapse narrative tray"}
-            aria-label={sidebarCollapsed ? "Expand narrative tray" : "Collapse narrative tray"}
+            title={sidebarCollapsed ? t(locale, 'expandNarrativeTray') : t(locale, 'collapseNarrativeTray')}
+            aria-label={sidebarCollapsed ? t(locale, 'expandNarrativeTray') : t(locale, 'collapseNarrativeTray')}
           >
             {sidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
           </button>
           <aside className="sidebar">
             <div className="presentation-panel">
-              <div className="presentation-panel-kicker">✨ AI Narrative</div>
+              <div className="presentation-panel-kicker">✨ {t(locale, 'aiNarrative')}</div>
               <h2 className="presentation-current-title">{currentNarrativeTitle}</h2>
               <div className="narrative-progress">
                 <div className="narrative-progress-list">
@@ -2682,7 +2919,7 @@ function Dashboard() {
                                   </span>
                                   <div className="step-queue-copy">
                                     <span className="step-queue-label">
-                                      {item.phase === 'processing' ? 'In Progress' : item.phase === 'done' ? 'Done' : 'Pending'}
+                                      {item.phase === 'processing' ? t(locale, 'inProgress') : item.phase === 'done' ? t(locale, 'done') : t(locale, 'pending')}
                                     </span>
                                     <span className="step-queue-value">{item.label}</span>
                                     {stage.status === 'active' && item.phase === 'processing' && stage.body ? (
@@ -2697,7 +2934,7 @@ function Dashboard() {
                               <div className="step-queue-item step-queue-item-active">
                                 <span className="step-queue-dot">•</span>
                                 <div className="step-queue-copy">
-                                  <span className="step-queue-label">In Progress</span>
+                                  <span className="step-queue-label">{t(locale, 'inProgress')}</span>
                                   <span className="step-queue-value">{stage.summaryTitle}</span>
                                   <div className="step-queue-description">{renderMessageBody(stage.body)}</div>
                                 </div>
@@ -2711,7 +2948,7 @@ function Dashboard() {
                 </div>
               </div>
               <div className="presentation-chat">
-                <div className="presentation-chat-kicker">Agent Messages</div>
+                <div className="presentation-chat-kicker">{t(locale, 'agentMessages')}</div>
                 <div ref={presentationChatListRef} className="presentation-chat-list">
                   {presentationCard.messages.map((message, index) => (
                     <button
@@ -2973,7 +3210,7 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
       data.appearance === 'pill' && "mission-node-pill-shell",
       data.appearance === 'phone' && "mission-node-phone-shell",
       (data.appearance === 'robot' || data.appearance === 'robot-arm') && "mission-node-robot-shell",
-      data.label === 'Ordering Agent' && "mission-node-ordering-shell",
+      data.nodeId === 'ott-ordering' && "mission-node-ordering-shell",
       data.kind === 'robot' && data.message && "mission-node-robot-bubble",
       (data.message || data.plan) && "mission-node-with-bubble",
     )} style={{ '--node-tint': meta.tint } as any}>
@@ -3093,16 +3330,16 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
       {handles.has('in-top-right') && <Handle id="in-top-right" type="target" position={Position.Top} className="mission-handle mission-handle-top" style={{ left: '68%' }} />}
       {handles.has('out-top-left') && <Handle id="out-top-left" type="source" position={Position.Top} className="mission-handle mission-handle-top" style={{ left: '38%' }} />}
       {handles.has('out-top-right') && <Handle id="out-top-right" type="source" position={Position.Top} className="mission-handle mission-handle-top" style={{ left: '68%' }} />}
-      {data.label === 'RAN' && handles.has('out-top-left') && (
+      {data.nodeId === 'ran' && handles.has('out-top-left') && (
         <div className="handle-label handle-label-top-left">n2</div>
       )}
-      {data.label === 'RAN' && handles.has('out-top-right') && (
+      {data.nodeId === 'ran' && handles.has('out-top-right') && (
         <div className="handle-label handle-label-top-right">n3</div>
       )}
-      {data.label === 'SRF' && handles.has('out-bottom') && (
+      {data.nodeId === 'srf' && handles.has('out-bottom') && (
         <div className="handle-label handle-label-bottom-left">n2</div>
       )}
-      {data.label === 'UP' && handles.has('in-bottom') && (
+      {data.nodeId === 'up' && handles.has('in-bottom') && (
         <div className="handle-label handle-label-bottom-right">n3</div>
       )}
       {handles.has('out-right-top') && <Handle id="out-right-top" type="source" position={Position.Right} className="mission-handle mission-handle-right" style={{ top: '38%' }} />}
@@ -3256,15 +3493,15 @@ const LAYOUT = {
     srf: { x: 150, y: 288, width: 128 },
     scf: { x: 322, y: 288, width: 128 },
     up: { x: 482, y: 288, width: 128 },
-    cmccGw: { x: 649, y: 288, width: 138 },
+    cmccGw: { x: 649, y: 288, width: 168 },
     ran: { x: 202, y: 572, width: 128 },
     phone: { x: 392, y: 520, width: 296, height: 136 },
     robotDog: { x: 392, y: 678, width: 316, collapsedWidth: 156, height: 112 },
     phoneAgentCard: { x: 578, y: 532, width: 174 },
     agentCard: { x: 578, y: 592, width: 174 },
     ottOrdering: { x: 1098.7776623098334, y: 93.77870152133133, width: 148 },
-    ottGw: { x: 1000, y: 204, width: 144 },
-    mnoGw: { x: 1000, y: 404, width: 144 },
+    ottGw: { x: 1000, y: 204, width: 168 },
+    mnoGw: { x: 1000, y: 404, width: 168 },
     mnoEndpoint: { x: 1096, y: 488, width: 304, height: 132 },
     armAgentCard: { x: 1120, y: 612, width: 174 },
   },
@@ -3273,6 +3510,7 @@ const LAYOUT = {
 function buildGraph(
   _script: DemoScript,
   playback: PlaybackFrame,
+  locale: Locale,
   transitioningNodeIds: string[] = [],
   transitioningEdgeIds: string[] = [],
   transitioningBubbles: Record<string, RetainedBubble> = {},
@@ -3319,39 +3557,40 @@ function buildGraph(
     const isProcessingBubble = bubbleState === 'processing';
     return hasActivePlan || isProcessingBubble;
   };
+  const graphCardDetails = (...details: NonNullable<DemoNodeData['details']>) => details;
   const nodes: Node[] = [
     // Main Boxes
     { id: 'r-ott', type: 'region', hidden: !visibleSet.has('r-ott'), position: { x: LAYOUT.ott.x, y: LAYOUT.ott.y }, style: { width: LAYOUT.ott.width, height: LAYOUT.ott.height, zIndex: -1 }, data: { label: 'OTT', variant: 'external' }, draggable: false },
     { id: 'r-mno-b', type: 'region', hidden: !visibleSet.has('r-mno-b'), position: { x: LAYOUT.mno.x, y: LAYOUT.mno.y }, style: { width: LAYOUT.mno.width, height: LAYOUT.mno.height, zIndex: -1 }, data: { label: 'MNO B', variant: 'external' }, draggable: false },
-    { id: 'r-core', type: 'region', hidden: !visibleSet.has('r-core'), position: { x: LAYOUT.core.x, y: LAYOUT.core.y }, style: { width: LAYOUT.core.width, height: LAYOUT.core.height, zIndex: -1 }, data: { label: 'CMCC Core Network', variant: 'domain' }, draggable: false },
-    { id: 'r-family', type: 'region', hidden: !visibleSet.has('r-family'), position: { x: familyLayout.x, y: familyLayout.y }, style: { width: familyLayout.width, height: familyLayout.height, zIndex: -1 }, data: { label: 'FAMILY DOMAIN (4sg520s2.acn.domain.cmcc)', variant: 'family' }, draggable: false },
+    { id: 'r-core', type: 'region', hidden: !visibleSet.has('r-core'), position: { x: LAYOUT.core.x, y: LAYOUT.core.y }, style: { width: LAYOUT.core.width, height: LAYOUT.core.height, zIndex: -1 }, data: { label: t(locale, 'graph.region.core'), variant: 'domain' }, draggable: false },
+    { id: 'r-family', type: 'region', hidden: !visibleSet.has('r-family'), position: { x: familyLayout.x, y: familyLayout.y }, style: { width: familyLayout.width, height: familyLayout.height, zIndex: -1 }, data: { label: t(locale, 'graph.region.family'), variant: 'family' }, draggable: false },
 
     // Core network control
-    { id: 'idm', type: 'mission', hidden: !visibleSet.has('idm'), position: { x: LAYOUT.nodes.idm.x, y: LAYOUT.nodes.idm.y }, style: { width: LAYOUT.nodes.idm.width }, data: { label: 'IDM', kind: 'idm', role: 'Identity Management Function', active: activeNodeSet.has('idm'), flashActive: flashFor('idm'), transitioning: transitioningNodeSet.has('idm'), context: activeNodeSet.has('idm'), handles: ['in-bottom', 'out-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('idm'), message: bubbleFor('idm'), messageIcon: bubbleIconFor('idm'), messageState: bubbleStateFor('idm'), messageLeaving: bubbleLeavingFor('idm') } },
-    { id: 'acn-agent', type: 'mission', hidden: !visibleSet.has('acn-agent'), position: { x: LAYOUT.nodes.acnAgent.x, y: LAYOUT.nodes.acnAgent.y }, style: { width: LAYOUT.nodes.acnAgent.width }, data: { label: 'ACN Agent', kind: 'agent', role: 'Agent Communication Netork Agent', active: activeNodeSet.has('acn-agent'), flashActive: flashFor('acn-agent'), transitioning: transitioningNodeSet.has('acn-agent'), emphasis: true, handles: ['in-bottom', 'out-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('acn-agent'), message: bubbleFor('acn-agent'), messageIcon: bubbleIconFor('acn-agent'), messageState: bubbleStateFor('acn-agent'), messageLeaving: bubbleLeavingFor('acn-agent'), plan: planFor('acn-agent') ? { title: planFor('acn-agent')!.title, items: planFor('acn-agent')!.items } : undefined, planLeaving: planLeavingFor('acn-agent') } },
+    { id: 'idm', type: 'mission', hidden: !visibleSet.has('idm'), position: { x: LAYOUT.nodes.idm.x, y: LAYOUT.nodes.idm.y }, style: { width: LAYOUT.nodes.idm.width }, data: { nodeId: 'idm', label: t(locale, 'graph.node.idm.label'), kind: 'idm', role: t(locale, 'graph.node.idm.role'), active: activeNodeSet.has('idm'), flashActive: flashFor('idm'), transitioning: transitioningNodeSet.has('idm'), context: activeNodeSet.has('idm'), handles: ['in-bottom', 'out-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('idm'), message: bubbleFor('idm'), messageIcon: bubbleIconFor('idm'), messageState: bubbleStateFor('idm'), messageLeaving: bubbleLeavingFor('idm') } },
+    { id: 'acn-agent', type: 'mission', hidden: !visibleSet.has('acn-agent'), position: { x: LAYOUT.nodes.acnAgent.x, y: LAYOUT.nodes.acnAgent.y }, style: { width: LAYOUT.nodes.acnAgent.width }, data: { nodeId: 'acn-agent', label: t(locale, 'graph.node.acnAgent.label'), kind: 'agent', role: t(locale, 'graph.node.acnAgent.role'), active: activeNodeSet.has('acn-agent'), flashActive: flashFor('acn-agent'), transitioning: transitioningNodeSet.has('acn-agent'), emphasis: true, handles: ['in-bottom', 'out-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('acn-agent'), message: bubbleFor('acn-agent'), messageIcon: bubbleIconFor('acn-agent'), messageState: bubbleStateFor('acn-agent'), messageLeaving: bubbleLeavingFor('acn-agent'), plan: planFor('acn-agent') ? { title: planFor('acn-agent')!.title, items: planFor('acn-agent')!.items } : undefined, planLeaving: planLeavingFor('acn-agent') } },
 
     // ABI backbone
-    { id: 'bus-line', type: 'bus', hidden: !visibleSet.has('bus-line'), position: { x: LAYOUT.bus.x, y: LAYOUT.bus.y }, style: { width: LAYOUT.bus.width, height: LAYOUT.bus.height, zIndex: 0 }, data: { label: 'ABI', caption: 'Agent Based Interface', context: playback.phase === 'running', emphasis: playback.phase === 'running' || playback.phase === 'gate' }, draggable: false },
+    { id: 'bus-line', type: 'bus', hidden: !visibleSet.has('bus-line'), position: { x: LAYOUT.bus.x, y: LAYOUT.bus.y }, style: { width: LAYOUT.bus.width, height: LAYOUT.bus.height, zIndex: 0 }, data: { label: t(locale, 'graph.bus.label'), caption: t(locale, 'graph.bus.caption'), context: playback.phase === 'running', emphasis: playback.phase === 'running' || playback.phase === 'gate' }, draggable: false },
 
     // Core network services and transport
-    { id: 'srf', type: 'mission', hidden: !visibleSet.has('srf'), position: { x: LAYOUT.nodes.srf.x, y: LAYOUT.nodes.srf.y }, style: { width: LAYOUT.nodes.srf.width }, data: { label: 'SRF', kind: 'srf', role: 'Signaling Routing Function', active: activeNodeSet.has('srf'), flashActive: flashFor('srf'), transitioning: transitioningNodeSet.has('srf'), handles: ['in-top', 'in-bottom', 'out-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('srf'), message: bubbleFor('srf'), messageIcon: bubbleIconFor('srf'), messageState: bubbleStateFor('srf'), messageLeaving: bubbleLeavingFor('srf') } },
-    { id: 'scf', type: 'mission', hidden: !visibleSet.has('scf'), position: { x: LAYOUT.nodes.scf.x, y: LAYOUT.nodes.scf.y }, style: { width: LAYOUT.nodes.scf.width }, data: { label: 'SCF', kind: 'scf', role: 'Service Control Function', active: activeNodeSet.has('scf'), flashActive: flashFor('scf'), transitioning: transitioningNodeSet.has('scf'), context: activeNodeSet.has('scf'), handles: ['in-top'], processing: playback.phase === 'running' && activeNodeSet.has('scf'), message: bubbleFor('scf'), messageIcon: bubbleIconFor('scf'), messageState: bubbleStateFor('scf'), messageLeaving: bubbleLeavingFor('scf') } },
-    { id: 'up', type: 'mission', hidden: !visibleSet.has('up'), position: { x: LAYOUT.nodes.up.x, y: LAYOUT.nodes.up.y }, style: { width: LAYOUT.nodes.up.width, height: 64 }, data: { label: 'UP', kind: 'up', role: 'User Plane', active: activeNodeSet.has('up'), flashActive: flashFor('up'), transitioning: transitioningNodeSet.has('up'), context: activeNodeSet.has('up'), handles: ['in-top', 'in-bottom', 'in-left', 'out-right'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('up'), message: bubbleFor('up'), messageIcon: bubbleIconFor('up'), messageState: bubbleStateFor('up'), messageLeaving: bubbleLeavingFor('up') } },
-    { id: 'agent-gw', type: 'mission', hidden: !visibleSet.has('agent-gw'), position: { x: LAYOUT.nodes.cmccGw.x, y: LAYOUT.nodes.cmccGw.y }, style: { width: LAYOUT.nodes.cmccGw.width, height: 64 }, data: { label: 'Agent GW', kind: 'gw', role: 'CMCC Agent Gateway', active: activeNodeSet.has('agent-gw'), flashActive: flashFor('agent-gw'), transitioning: transitioningNodeSet.has('agent-gw'), context: activeNodeSet.has('agent-gw'), handles: ['in-top', 'in-left', 'out-right-top', 'out-right-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('agent-gw'), message: bubbleFor('agent-gw'), messageIcon: bubbleIconFor('agent-gw'), messageState: bubbleStateFor('agent-gw'), messageLeaving: bubbleLeavingFor('agent-gw') } },
-    { id: 'ran', type: 'mission', hidden: !visibleSet.has('ran'), position: { x: LAYOUT.nodes.ran.x, y: LAYOUT.nodes.ran.y }, style: { width: LAYOUT.nodes.ran.width }, data: { label: 'RAN', kind: 'access', role: 'Radio Access Network', active: activeNodeSet.has('ran'), flashActive: flashFor('ran'), transitioning: transitioningNodeSet.has('ran'), handles: ['in-right', 'out-top-left', 'out-top-right', 'out-right-bottom'], appearance: 'pill', processing: playback.phase === 'running' && activeNodeSet.has('ran'), message: bubbleFor('ran'), messageIcon: bubbleIconFor('ran'), messageState: bubbleStateFor('ran'), messageLeaving: bubbleLeavingFor('ran') } },
+    { id: 'srf', type: 'mission', hidden: !visibleSet.has('srf'), position: { x: LAYOUT.nodes.srf.x, y: LAYOUT.nodes.srf.y }, style: { width: LAYOUT.nodes.srf.width }, data: { nodeId: 'srf', label: t(locale, 'graph.node.srf.label'), kind: 'srf', role: t(locale, 'graph.node.srf.role'), active: activeNodeSet.has('srf'), flashActive: flashFor('srf'), transitioning: transitioningNodeSet.has('srf'), handles: ['in-top', 'in-bottom', 'out-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('srf'), message: bubbleFor('srf'), messageIcon: bubbleIconFor('srf'), messageState: bubbleStateFor('srf'), messageLeaving: bubbleLeavingFor('srf') } },
+    { id: 'scf', type: 'mission', hidden: !visibleSet.has('scf'), position: { x: LAYOUT.nodes.scf.x, y: LAYOUT.nodes.scf.y }, style: { width: LAYOUT.nodes.scf.width }, data: { nodeId: 'scf', label: t(locale, 'graph.node.scf.label'), kind: 'scf', role: t(locale, 'graph.node.scf.role'), active: activeNodeSet.has('scf'), flashActive: flashFor('scf'), transitioning: transitioningNodeSet.has('scf'), context: activeNodeSet.has('scf'), handles: ['in-top'], processing: playback.phase === 'running' && activeNodeSet.has('scf'), message: bubbleFor('scf'), messageIcon: bubbleIconFor('scf'), messageState: bubbleStateFor('scf'), messageLeaving: bubbleLeavingFor('scf') } },
+    { id: 'up', type: 'mission', hidden: !visibleSet.has('up'), position: { x: LAYOUT.nodes.up.x, y: LAYOUT.nodes.up.y }, style: { width: LAYOUT.nodes.up.width, height: 64 }, data: { nodeId: 'up', label: t(locale, 'graph.node.up.label'), kind: 'up', role: t(locale, 'graph.node.up.role'), active: activeNodeSet.has('up'), flashActive: flashFor('up'), transitioning: transitioningNodeSet.has('up'), context: activeNodeSet.has('up'), handles: ['in-top', 'in-bottom', 'in-left', 'out-right'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('up'), message: bubbleFor('up'), messageIcon: bubbleIconFor('up'), messageState: bubbleStateFor('up'), messageLeaving: bubbleLeavingFor('up') } },
+    { id: 'agent-gw', type: 'mission', hidden: !visibleSet.has('agent-gw'), position: { x: LAYOUT.nodes.cmccGw.x, y: LAYOUT.nodes.cmccGw.y }, style: { width: LAYOUT.nodes.cmccGw.width, height: 64 }, data: { nodeId: 'agent-gw', label: t(locale, 'graph.node.agentGw.label'), kind: 'gw', role: t(locale, 'graph.node.agentGw.role'), active: activeNodeSet.has('agent-gw'), flashActive: flashFor('agent-gw'), transitioning: transitioningNodeSet.has('agent-gw'), context: activeNodeSet.has('agent-gw'), handles: ['in-top', 'in-left', 'out-right-top', 'out-right-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('agent-gw'), message: bubbleFor('agent-gw'), messageIcon: bubbleIconFor('agent-gw'), messageState: bubbleStateFor('agent-gw'), messageLeaving: bubbleLeavingFor('agent-gw') } },
+    { id: 'ran', type: 'mission', hidden: !visibleSet.has('ran'), position: { x: LAYOUT.nodes.ran.x, y: LAYOUT.nodes.ran.y }, style: { width: LAYOUT.nodes.ran.width }, data: { nodeId: 'ran', label: t(locale, 'graph.node.ran.label'), kind: 'access', role: t(locale, 'graph.node.ran.role'), active: activeNodeSet.has('ran'), flashActive: flashFor('ran'), transitioning: transitioningNodeSet.has('ran'), handles: ['in-right', 'out-top-left', 'out-top-right', 'out-right-bottom'], appearance: 'pill', processing: playback.phase === 'running' && activeNodeSet.has('ran'), message: bubbleFor('ran'), messageIcon: bubbleIconFor('ran'), messageState: bubbleStateFor('ran'), messageLeaving: bubbleLeavingFor('ran') } },
 
     // Family domain
-    { id: 'phone', type: 'mission', hidden: !visibleSet.has('phone'), position: { x: LAYOUT.nodes.phone.x, y: LAYOUT.nodes.phone.y }, style: { width: LAYOUT.nodes.phone.width, height: LAYOUT.nodes.phone.height }, data: { label: 'Phone', kind: 'endpoint', active: activeNodeSet.has('phone'), flashActive: flashFor('phone'), transitioning: transitioningNodeSet.has('phone'), handles: ['in-left', 'out-left'], appearance: 'phone', embeddedCard: { visible: true, chips: ['🪪 did:3gpp:4b92ac1e@cmcc.com', '📱 Phone', '⚙️ Huawei'] }, processing: playback.phase === 'running' && activeNodeSet.has('phone'), message: bubbleFor('phone'), messageIcon: bubbleIconFor('phone'), messageState: bubbleStateFor('phone'), messageLeaving: bubbleLeavingFor('phone') } },
-    { id: 'robot-dog', type: 'mission', hidden: !visibleSet.has('robot-dog'), position: { x: LAYOUT.nodes.robotDog.x, y: LAYOUT.nodes.robotDog.y }, style: { width: robotDogWidth, height: LAYOUT.nodes.robotDog.height }, data: { label: 'Robot Dog', kind: 'robot', active: activeNodeSet.has('robot-dog'), flashActive: flashFor('robot-dog'), transitioning: transitioningNodeSet.has('robot-dog'), handles: ['in-left', 'out-left'], appearance: 'robot', embeddedCard: { visible: robotDogExpanded, chips: ['🪪 did:3gpp:6f0d5b7a@cmcc.com', '📷 Camera', '📦 10KG', '⚙️ Unitree'] }, processing: playback.phase === 'running' && activeNodeSet.has('robot-dog'), message: bubbleFor('robot-dog'), messageIcon: bubbleIconFor('robot-dog'), messageState: bubbleStateFor('robot-dog'), messageLeaving: bubbleLeavingFor('robot-dog') } },
-    { id: 'phone-agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.phoneAgentCard.x, y: LAYOUT.nodes.phoneAgentCard.y }, style: { width: LAYOUT.nodes.phoneAgentCard.width }, data: { label: 'Agent Card', kind: 'card', details: [{ label: 'DID', value: '🪪 did:3gpp:4b92ac1e@cmcc.com' }, { label: 'Type', values: ['📱 Phone', '⚙️ Huawei'] }], active: activeNodeSet.has('phone-agent-card'), flashActive: flashFor('phone-agent-card'), transitioning: transitioningNodeSet.has('phone-agent-card'), handles: ['in-left'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('phone-agent-card'), message: bubbleFor('phone-agent-card'), messageIcon: bubbleIconFor('phone-agent-card'), messageState: bubbleStateFor('phone-agent-card'), messageLeaving: bubbleLeavingFor('phone-agent-card') } },
-    { id: 'agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.agentCard.x, y: LAYOUT.nodes.agentCard.y }, style: { width: LAYOUT.nodes.agentCard.width }, data: { label: 'Agent Card', kind: 'card', details: [{ label: 'DID', value: '🪪 did:3gpp:6f0d5b7a@cmcc.com' }, { label: 'Capabilities', values: ['📷 Camera', '📦 Payload 10KG'] }, { label: 'Vendor', values: ['⚙️ Unitree'] }], active: activeNodeSet.has('agent-card'), flashActive: flashFor('agent-card'), transitioning: transitioningNodeSet.has('agent-card'), handles: ['in-left'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('agent-card'), message: bubbleFor('agent-card'), messageIcon: bubbleIconFor('agent-card'), messageState: bubbleStateFor('agent-card'), messageLeaving: bubbleLeavingFor('agent-card') } },
+    { id: 'phone', type: 'mission', hidden: !visibleSet.has('phone'), position: { x: LAYOUT.nodes.phone.x, y: LAYOUT.nodes.phone.y }, style: { width: LAYOUT.nodes.phone.width, height: LAYOUT.nodes.phone.height }, data: { label: t(locale, 'graph.node.phone.label'), kind: 'endpoint', active: activeNodeSet.has('phone'), flashActive: flashFor('phone'), transitioning: transitioningNodeSet.has('phone'), handles: ['in-left', 'out-left'], appearance: 'phone', embeddedCard: { visible: true, chips: ['🪪 did:3gpp:4b92ac1e@cmcc.com', `📱 ${t(locale, 'graph.node.phone.chipLabel')}`, '⚙️ Huawei'] }, processing: playback.phase === 'running' && activeNodeSet.has('phone'), message: bubbleFor('phone'), messageIcon: bubbleIconFor('phone'), messageState: bubbleStateFor('phone'), messageLeaving: bubbleLeavingFor('phone') } },
+    { id: 'robot-dog', type: 'mission', hidden: !visibleSet.has('robot-dog'), position: { x: LAYOUT.nodes.robotDog.x, y: LAYOUT.nodes.robotDog.y }, style: { width: robotDogWidth, height: LAYOUT.nodes.robotDog.height }, data: { label: t(locale, 'graph.node.robotDog.label'), kind: 'robot', active: activeNodeSet.has('robot-dog'), flashActive: flashFor('robot-dog'), transitioning: transitioningNodeSet.has('robot-dog'), handles: ['in-left', 'out-left'], appearance: 'robot', embeddedCard: { visible: robotDogExpanded, chips: ['🪪 did:3gpp:6f0d5b7a@cmcc.com', `📷 ${t(locale, 'graph.node.robotDog.camera')}`, '📦 10KG', '⚙️ Unitree'] }, processing: playback.phase === 'running' && activeNodeSet.has('robot-dog'), message: bubbleFor('robot-dog'), messageIcon: bubbleIconFor('robot-dog'), messageState: bubbleStateFor('robot-dog'), messageLeaving: bubbleLeavingFor('robot-dog') } },
+    { id: 'phone-agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.phoneAgentCard.x, y: LAYOUT.nodes.phoneAgentCard.y }, style: { width: LAYOUT.nodes.phoneAgentCard.width }, data: { label: t(locale, 'graph.node.phoneAgentCard.label'), kind: 'card', details: graphCardDetails({ label: t(locale, 'graph.card.did'), value: '🪪 did:3gpp:4b92ac1e@cmcc.com' }, { label: t(locale, 'graph.card.type'), values: [`📱 ${t(locale, 'graph.node.phone.chipLabel')}`, '⚙️ Huawei'] }), active: activeNodeSet.has('phone-agent-card'), flashActive: flashFor('phone-agent-card'), transitioning: transitioningNodeSet.has('phone-agent-card'), handles: ['in-left'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('phone-agent-card'), message: bubbleFor('phone-agent-card'), messageIcon: bubbleIconFor('phone-agent-card'), messageState: bubbleStateFor('phone-agent-card'), messageLeaving: bubbleLeavingFor('phone-agent-card') } },
+    { id: 'agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.agentCard.x, y: LAYOUT.nodes.agentCard.y }, style: { width: LAYOUT.nodes.agentCard.width }, data: { label: t(locale, 'graph.node.agentCard.label'), kind: 'card', details: graphCardDetails({ label: t(locale, 'graph.card.did'), value: '🪪 did:3gpp:6f0d5b7a@cmcc.com' }, { label: t(locale, 'graph.card.capabilities'), values: [`📷 ${t(locale, 'graph.node.robotDog.camera')}`, `📦 ${t(locale, 'graph.card.payload10kg')}`] }, { label: t(locale, 'graph.card.vendor'), values: ['⚙️ Unitree'] }), active: activeNodeSet.has('agent-card'), flashActive: flashFor('agent-card'), transitioning: transitioningNodeSet.has('agent-card'), handles: ['in-left'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('agent-card'), message: bubbleFor('agent-card'), messageIcon: bubbleIconFor('agent-card'), messageState: bubbleStateFor('agent-card'), messageLeaving: bubbleLeavingFor('agent-card') } },
 
     // External Boxes Components
-    { id: 'ott-ordering', type: 'mission', hidden: !visibleSet.has('ott-ordering'), position: { x: LAYOUT.nodes.ottOrdering.x, y: LAYOUT.nodes.ottOrdering.y }, style: { width: LAYOUT.nodes.ottOrdering.width }, data: { label: 'Ordering Agent', kind: 'agent', role: 'OTT Application Agent', active: activeNodeSet.has('ott-ordering'), flashActive: flashFor('ott-ordering'), transitioning: transitioningNodeSet.has('ott-ordering'), context: activeNodeSet.has('ott-ordering'), handles: ['in-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('ott-ordering'), message: bubbleFor('ott-ordering'), messageIcon: bubbleIconFor('ott-ordering'), messageState: bubbleStateFor('ott-ordering'), messageLeaving: bubbleLeavingFor('ott-ordering'), plan: planFor('ott-ordering') ? { title: planFor('ott-ordering')!.title, items: planFor('ott-ordering')!.items } : undefined, planLeaving: planLeavingFor('ott-ordering') } },
-    { id: 'ott-gw', type: 'mission', hidden: !visibleSet.has('ott-gw'), position: { x: LAYOUT.nodes.ottGw.x, y: LAYOUT.nodes.ottGw.y }, style: { width: LAYOUT.nodes.ottGw.width }, data: { label: 'Agent GW', kind: 'gw', role: 'OTT Agent Gateway', active: activeNodeSet.has('ott-gw'), flashActive: flashFor('ott-gw'), transitioning: transitioningNodeSet.has('ott-gw'), context: activeNodeSet.has('ott-gw'), handles: ['in-left', 'out-right', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('ott-gw'), message: bubbleFor('ott-gw'), messageIcon: bubbleIconFor('ott-gw'), messageState: bubbleStateFor('ott-gw'), messageLeaving: bubbleLeavingFor('ott-gw') } },
-    { id: 'mno-gw', type: 'mission', hidden: !visibleSet.has('mno-gw'), position: { x: LAYOUT.nodes.mnoGw.x, y: LAYOUT.nodes.mnoGw.y }, style: { width: LAYOUT.nodes.mnoGw.width }, data: { label: 'Agent GW', kind: 'gw', role: 'MNO B Agent Gateway', active: activeNodeSet.has('mno-gw'), flashActive: flashFor('mno-gw'), transitioning: transitioningNodeSet.has('mno-gw'), context: activeNodeSet.has('mno-gw'), handles: ['in-top', 'in-left', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('mno-gw'), message: bubbleFor('mno-gw'), messageIcon: bubbleIconFor('mno-gw'), messageState: bubbleStateFor('mno-gw'), messageLeaving: bubbleLeavingFor('mno-gw') } },
-    { id: 'mno-endpoint', type: 'mission', hidden: !visibleSet.has('mno-endpoint'), position: { x: LAYOUT.nodes.mnoEndpoint.x, y: LAYOUT.nodes.mnoEndpoint.y }, style: { width: LAYOUT.nodes.mnoEndpoint.width, height: LAYOUT.nodes.mnoEndpoint.height }, data: { label: 'Robot Arm', kind: 'arm', active: activeNodeSet.has('mno-endpoint'), flashActive: flashFor('mno-endpoint'), transitioning: transitioningNodeSet.has('mno-endpoint'), handles: ['in-left'], appearance: 'robot-arm', embeddedCard: { visible: true, chips: ['🪪 did:3gpp:a18f4d2c@mnob.com', '🦾 Robot Arm', '📦 5KG', '⚙️ RobotFactory'] }, processing: playback.phase === 'running' && activeNodeSet.has('mno-endpoint'), message: bubbleFor('mno-endpoint'), messageIcon: bubbleIconFor('mno-endpoint'), messageState: bubbleStateFor('mno-endpoint'), messageLeaving: bubbleLeavingFor('mno-endpoint'), plan: planFor('mno-endpoint') ? { title: planFor('mno-endpoint')!.title, items: planFor('mno-endpoint')!.items } : undefined, planLeaving: planLeavingFor('mno-endpoint') } },
-    { id: 'arm-agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.armAgentCard.x, y: LAYOUT.nodes.armAgentCard.y }, style: { width: LAYOUT.nodes.armAgentCard.width }, data: { label: 'Agent Card', kind: 'card', details: [{ label: 'DID', value: '🪪 did:3gpp:a18f4d2c@mnob.com' }, { label: 'Type', values: ['🦾 Robot Arm', '⚙️ RobotFactory'] }], active: activeNodeSet.has('arm-agent-card'), flashActive: flashFor('arm-agent-card'), transitioning: transitioningNodeSet.has('arm-agent-card'), handles: ['in-top'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('arm-agent-card'), message: bubbleFor('arm-agent-card'), messageIcon: bubbleIconFor('arm-agent-card'), messageState: bubbleStateFor('arm-agent-card'), messageLeaving: bubbleLeavingFor('arm-agent-card') } },
+    { id: 'ott-ordering', type: 'mission', hidden: !visibleSet.has('ott-ordering'), position: { x: LAYOUT.nodes.ottOrdering.x, y: LAYOUT.nodes.ottOrdering.y }, style: { width: LAYOUT.nodes.ottOrdering.width }, data: { nodeId: 'ott-ordering', label: t(locale, 'graph.node.orderingAgent.label'), kind: 'agent', role: t(locale, 'graph.node.orderingAgent.role'), active: activeNodeSet.has('ott-ordering'), flashActive: flashFor('ott-ordering'), transitioning: transitioningNodeSet.has('ott-ordering'), context: activeNodeSet.has('ott-ordering'), handles: ['in-bottom'], processing: playback.phase === 'running' && activeNodeSet.has('ott-ordering'), message: bubbleFor('ott-ordering'), messageIcon: bubbleIconFor('ott-ordering'), messageState: bubbleStateFor('ott-ordering'), messageLeaving: bubbleLeavingFor('ott-ordering'), plan: planFor('ott-ordering') ? { title: planFor('ott-ordering')!.title, items: planFor('ott-ordering')!.items } : undefined, planLeaving: planLeavingFor('ott-ordering') } },
+    { id: 'ott-gw', type: 'mission', hidden: !visibleSet.has('ott-gw'), position: { x: LAYOUT.nodes.ottGw.x, y: LAYOUT.nodes.ottGw.y }, style: { width: LAYOUT.nodes.ottGw.width }, data: { nodeId: 'ott-gw', label: t(locale, 'graph.node.ottGateway.label'), kind: 'gw', role: t(locale, 'graph.node.ottGateway.role'), active: activeNodeSet.has('ott-gw'), flashActive: flashFor('ott-gw'), transitioning: transitioningNodeSet.has('ott-gw'), context: activeNodeSet.has('ott-gw'), handles: ['in-left', 'out-right', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('ott-gw'), message: bubbleFor('ott-gw'), messageIcon: bubbleIconFor('ott-gw'), messageState: bubbleStateFor('ott-gw'), messageLeaving: bubbleLeavingFor('ott-gw') } },
+    { id: 'mno-gw', type: 'mission', hidden: !visibleSet.has('mno-gw'), position: { x: LAYOUT.nodes.mnoGw.x, y: LAYOUT.nodes.mnoGw.y }, style: { width: LAYOUT.nodes.mnoGw.width }, data: { nodeId: 'mno-gw', label: t(locale, 'graph.node.mnoGateway.label'), kind: 'gw', role: t(locale, 'graph.node.mnoGateway.role'), active: activeNodeSet.has('mno-gw'), flashActive: flashFor('mno-gw'), transitioning: transitioningNodeSet.has('mno-gw'), context: activeNodeSet.has('mno-gw'), handles: ['in-top', 'in-left', 'out-bottom'], appearance: 'gateway', processing: playback.phase === 'running' && activeNodeSet.has('mno-gw'), message: bubbleFor('mno-gw'), messageIcon: bubbleIconFor('mno-gw'), messageState: bubbleStateFor('mno-gw'), messageLeaving: bubbleLeavingFor('mno-gw') } },
+    { id: 'mno-endpoint', type: 'mission', hidden: !visibleSet.has('mno-endpoint'), position: { x: LAYOUT.nodes.mnoEndpoint.x, y: LAYOUT.nodes.mnoEndpoint.y }, style: { width: LAYOUT.nodes.mnoEndpoint.width, height: LAYOUT.nodes.mnoEndpoint.height }, data: { label: t(locale, 'graph.node.robotArm.label'), kind: 'arm', active: activeNodeSet.has('mno-endpoint'), flashActive: flashFor('mno-endpoint'), transitioning: transitioningNodeSet.has('mno-endpoint'), handles: ['in-left'], appearance: 'robot-arm', embeddedCard: { visible: true, chips: ['🪪 did:3gpp:a18f4d2c@mnob.com', `🦾 ${t(locale, 'graph.node.robotArm.chipLabel')}`, `📦 ${t(locale, 'graph.card.payload5kg')}`, '⚙️ RobotFactory'] }, processing: playback.phase === 'running' && activeNodeSet.has('mno-endpoint'), message: bubbleFor('mno-endpoint'), messageIcon: bubbleIconFor('mno-endpoint'), messageState: bubbleStateFor('mno-endpoint'), messageLeaving: bubbleLeavingFor('mno-endpoint'), plan: planFor('mno-endpoint') ? { title: planFor('mno-endpoint')!.title, items: planFor('mno-endpoint')!.items } : undefined, planLeaving: planLeavingFor('mno-endpoint') } },
+    { id: 'arm-agent-card', type: 'mission', hidden: true, position: { x: LAYOUT.nodes.armAgentCard.x, y: LAYOUT.nodes.armAgentCard.y }, style: { width: LAYOUT.nodes.armAgentCard.width }, data: { label: t(locale, 'graph.node.armAgentCard.label'), kind: 'card', details: graphCardDetails({ label: t(locale, 'graph.card.did'), value: '🪪 did:3gpp:a18f4d2c@mnob.com' }, { label: t(locale, 'graph.card.type'), values: [`🦾 ${t(locale, 'graph.node.robotArm.chipLabel')}`, '⚙️ RobotFactory'] }), active: activeNodeSet.has('arm-agent-card'), flashActive: flashFor('arm-agent-card'), transitioning: transitioningNodeSet.has('arm-agent-card'), handles: ['in-top'], appearance: 'agent-card', processing: playback.phase === 'running' && activeNodeSet.has('arm-agent-card'), message: bubbleFor('arm-agent-card'), messageIcon: bubbleIconFor('arm-agent-card'), messageState: bubbleStateFor('arm-agent-card'), messageLeaving: bubbleLeavingFor('arm-agent-card') } },
   ];
 
   const edges: Edge[] = [
