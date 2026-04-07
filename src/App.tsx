@@ -2929,7 +2929,7 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
       {data.label === 'SRF' && handles.has('out-bottom') && (
         <div className="handle-label handle-label-bottom-left">n2</div>
       )}
-      {data.label === 'UP' && handles.has('out-bottom-right') && (
+      {data.label === 'UP' && handles.has('in-bottom') && (
         <div className="handle-label handle-label-bottom-right">n3</div>
       )}
       {handles.has('out-right-top') && <Handle id="out-right-top" type="source" position={Position.Right} className="mission-handle mission-handle-right" style={{ top: '38%' }} />}
