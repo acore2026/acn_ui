@@ -56,9 +56,7 @@ type DemoNodeData = {
   messageIcon?: BubbleIcon;
   messageState?: 'processing' | 'done';
   messageLeaving?: boolean;
-  captionLabel?: string;
-  caption?: string;
-  captionLeaving?: boolean;
+  suppressMessage?: boolean;
   embeddedCard?: {
     visible: boolean;
     chips: string[];
@@ -203,6 +201,8 @@ const DEFAULT_VIEWPORT: Viewport = { x: -22, y: 42, zoom: 1.24 };
 const GRAPH_FONT_SCALE_STORAGE_KEY = 'acn-ui-graph-font-scale';
 const CANVAS_VIEWPORT_STORAGE_KEY = 'acn-ui-canvas-viewport';
 const SIDEBAR_WIDTH_STORAGE_KEY = 'acn-ui-sidebar-width';
+const CONTINUOUS_PLAY_STORAGE_KEY = 'acn-ui-continuous-play';
+const PLAY_SPEED_STORAGE_KEY = 'acn-ui-play-speed';
 const DEFAULT_SIDEBAR_WIDTH = 487;
 const MIN_SIDEBAR_WIDTH = 320;
 const MAX_SIDEBAR_WIDTH = 560;
@@ -210,6 +210,10 @@ const DEFAULT_GRAPH_FONT_SCALE = 1.2;
 const MIN_GRAPH_FONT_SCALE = 0.9;
 const MAX_GRAPH_FONT_SCALE = 1.6;
 const GRAPH_ZOOM_STEP = 1.03;
+const CONTINUOUS_PLAY_GATE_DELAY_MS = 1000;
+const DEFAULT_PLAY_SPEED = 1;
+const MIN_PLAY_SPEED = 0.5;
+const MAX_PLAY_SPEED = 3;
 const MIN_GRAPH_ZOOM = 0.5;
 const MAX_GRAPH_ZOOM = 2;
 const SCENARIO_RAW_BY_ID = {
@@ -258,6 +262,7 @@ const CATALOG_KEY_ALIASES: Record<string, string> = {
   stage: 'ui.settings.stage',
   poll: 'ui.settings.poll',
   updated: 'ui.settings.updated',
+  playtime: 'ui.settings.playtime',
   canvas: 'ui.settings.canvas',
   ignored: 'ui.settings.ignored',
   connected: 'ui.settings.connected',
@@ -266,6 +271,9 @@ const CATALOG_KEY_ALIASES: Record<string, string> = {
   hideScript: 'ui.settings.hideScript',
   graphTextSize: 'ui.settings.graphTextSize',
   graphTextScaleValue: 'ui.settings.graphTextScaleValue',
+  playSpeed: 'ui.settings.playSpeed',
+  playSpeedValue: 'ui.settings.playSpeedValue',
+  continuousPlay: 'ui.settings.continuousPlay',
   canvasView: 'ui.settings.canvasView',
   zoomIn: 'ui.settings.zoomIn',
   zoomOut: 'ui.settings.zoomOut',
@@ -379,6 +387,35 @@ function getInitialSidebarWidth() {
     return DEFAULT_SIDEBAR_WIDTH;
   }
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, raw));
+}
+
+function getInitialContinuousPlay() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.localStorage.getItem(CONTINUOUS_PLAY_STORAGE_KEY) === 'true';
+}
+
+function getInitialPlaySpeed() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_PLAY_SPEED;
+  }
+  const raw = Number.parseFloat(window.localStorage.getItem(PLAY_SPEED_STORAGE_KEY) ?? '');
+  if (!Number.isFinite(raw)) {
+    return DEFAULT_PLAY_SPEED;
+  }
+  return Math.min(MAX_PLAY_SPEED, Math.max(MIN_PLAY_SPEED, raw));
+}
+
+function formatPlaytime(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function parseScenarioDoc(raw: string): ScenarioDoc {
@@ -1792,18 +1829,18 @@ function buildPlaybackFrame(
   };
 }
 
-function resolveTalkDelay(action?: FlatAction) {
+function resolveTalkDelay(action?: FlatAction, playSpeed = DEFAULT_PLAY_SPEED) {
   if (!action || typeof action.delayMs !== 'number' || !Number.isFinite(action.delayMs)) {
-    return ACTION_DELAY_MS;
+    return Math.max(0, ACTION_DELAY_MS / playSpeed);
   }
-  return Math.max(0, action.delayMs);
+  return Math.max(0, action.delayMs / playSpeed);
 }
 
-function resolveChecklistProcessingDelay(action?: FlatAction) {
+function resolveChecklistProcessingDelay(action?: FlatAction, playSpeed = DEFAULT_PLAY_SPEED) {
   if (!action || typeof action.delayMs !== 'number' || !Number.isFinite(action.delayMs)) {
-    return CHECKLIST_PROCESSING_DELAY_MS;
+    return Math.max(0, CHECKLIST_PROCESSING_DELAY_MS / playSpeed);
   }
-  return Math.max(0, action.delayMs);
+  return Math.max(0, action.delayMs / playSpeed);
 }
 
 function buildFinalDeliveryPresentation(messages: PresentationMessage[], locale: Locale) {
@@ -2248,7 +2285,10 @@ function Dashboard() {
   const [lastBackendPollAt, setLastBackendPollAt] = useState<number | null>(null);
   const [canvasViewport, setCanvasViewport] = useState<Viewport>(() => getInitialCanvasViewport());
   const [graphFontScale, setGraphFontScale] = useState(() => getInitialGraphFontScale());
+  const [playSpeed, setPlaySpeed] = useState(() => getInitialPlaySpeed());
+  const [continuousPlay, setContinuousPlay] = useState(() => getInitialContinuousPlay());
   const [backendEnabled, setBackendEnabled] = useState(() => !initialDebugMode);
+  const [playtimeElapsedMs, setPlaytimeElapsedMs] = useState(0);
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<PresentationMessage | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -2270,6 +2310,10 @@ function Dashboard() {
   }>({ nodeIds: [], edgeIds: [], bubbles: {}, graphCaption: undefined, planBubble: undefined });
   const transitionTimerRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
+  const autoAdvanceTimerRef = useRef<number | null>(null);
+  const playtimeTickerRef = useRef<number | null>(null);
+  const playtimeStartedAtRef = useRef<number | null>(null);
+  const playtimeAccumulatedRef = useRef(0);
   const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
   const sidebarResizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
 
@@ -2281,6 +2325,20 @@ function Dashboard() {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
+    }
+  }, []);
+
+  const clearAutoAdvanceTimer = useCallback(() => {
+    if (autoAdvanceTimerRef.current !== null) {
+      window.clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+  }, []);
+
+  const clearPlaytimeTicker = useCallback(() => {
+    if (playtimeTickerRef.current !== null) {
+      window.clearInterval(playtimeTickerRef.current);
+      playtimeTickerRef.current = null;
     }
   }, []);
 
@@ -2317,6 +2375,18 @@ function Dashboard() {
       window.localStorage.setItem(GRAPH_FONT_SCALE_STORAGE_KEY, String(graphFontScale));
     }
   }, [graphFontScale]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(PLAY_SPEED_STORAGE_KEY, String(playSpeed));
+    }
+  }, [playSpeed]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CONTINUOUS_PLAY_STORAGE_KEY, String(continuousPlay));
+    }
+  }, [continuousPlay]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -2705,6 +2775,8 @@ function Dashboard() {
     }));
     setEdges(graph.edges);
   }, [locale, playback, scriptDoc, transitioningBubbles, transitioningCaptions, transitioningEdgeIds, transitioningNodeIds, transitioningPlans]);
+  const canvasCaption = playback.graphCaption ?? Object.values(transitioningCaptions)[0];
+  const canvasCaptionLeaving = !playback.graphCaption && Boolean(canvasCaption);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -2729,19 +2801,33 @@ function Dashboard() {
     }
     if (activeAction?.checklistTitle) {
       const delayMs = playback.checklistPhase === 'finished' || playback.checklistPhase === 'checklist-finished'
-        ? CHECKLIST_SETTLE_DELAY_MS
-        : resolveChecklistProcessingDelay(activeAction);
+        ? Math.max(0, CHECKLIST_SETTLE_DELAY_MS / playSpeed)
+        : resolveChecklistProcessingDelay(activeAction, playSpeed);
       timerRef.current = window.setTimeout(() => {
         updatePlayback('timer');
       }, delayMs);
       return () => clearTimer();
     }
-    const delayMs = resolveTalkDelay(activeAction);
+    const delayMs = resolveTalkDelay(activeAction, playSpeed);
     timerRef.current = window.setTimeout(() => {
       updatePlayback('timer');
     }, delayMs);
     return () => clearTimer();
-  }, [activeActionChecklistTitle, activeActionDelayMs, activeActionId, clearTimer, playback.checklistPhase, playback.phase, playback.stageIndex, updatePlayback]);
+  }, [activeActionChecklistTitle, activeActionDelayMs, activeActionId, clearTimer, playback.checklistPhase, playback.phase, playback.stageIndex, playSpeed, updatePlayback]);
+
+  useEffect(() => {
+    clearAutoAdvanceTimer();
+    if (!continuousPlay) {
+      return undefined;
+    }
+    if (playback.phase === 'gate') {
+      autoAdvanceTimerRef.current = window.setTimeout(() => {
+        updatePlayback('continue');
+      }, CONTINUOUS_PLAY_GATE_DELAY_MS / playSpeed);
+      return () => clearAutoAdvanceTimer();
+    }
+    return () => clearAutoAdvanceTimer();
+  }, [clearAutoAdvanceTimer, continuousPlay, playback.phase, playback.stageIndex, playSpeed, updatePlayback]);
 
   useEffect(() => {
     if (!backendEnabled) {
@@ -2758,6 +2844,9 @@ function Dashboard() {
   }, [backendEnabled, fetchBackendStage]);
 
   useEffect(() => {
+    if (continuousPlay) {
+      return;
+    }
     if (!backendEnabled) {
       return;
     }
@@ -2775,7 +2864,46 @@ function Dashboard() {
     if (playback.phase === 'gate' && playback.stageIndex < unlockedStageIndex) {
       updatePlayback('continue');
     }
-  }, [backendEnabled, backendStage, playback.phase, playback.stageIndex, scriptDoc.stages.length, updatePlayback]);
+  }, [backendEnabled, backendStage, continuousPlay, playback.phase, playback.stageIndex, scriptDoc.stages.length, updatePlayback]);
+
+  useEffect(() => {
+    clearPlaytimeTicker();
+    if (playback.phase === 'standby') {
+      playtimeStartedAtRef.current = null;
+      playtimeAccumulatedRef.current = 0;
+      setPlaytimeElapsedMs(0);
+      return undefined;
+    }
+
+    const now = Date.now();
+    const shouldCount = playback.phase === 'running' || playback.phase === 'gate';
+
+    if (shouldCount && playtimeStartedAtRef.current === null) {
+      playtimeStartedAtRef.current = now;
+    }
+
+    if (!shouldCount && playtimeStartedAtRef.current !== null) {
+      playtimeAccumulatedRef.current += now - playtimeStartedAtRef.current;
+      playtimeStartedAtRef.current = null;
+    }
+
+    setPlaytimeElapsedMs(
+      playtimeAccumulatedRef.current + (playtimeStartedAtRef.current !== null ? now - playtimeStartedAtRef.current : 0),
+    );
+
+    if (!shouldCount) {
+      return undefined;
+    }
+
+    playtimeTickerRef.current = window.setInterval(() => {
+      const tickNow = Date.now();
+      setPlaytimeElapsedMs(
+        playtimeAccumulatedRef.current + (playtimeStartedAtRef.current !== null ? tickNow - playtimeStartedAtRef.current : 0),
+      );
+    }, 250);
+
+    return () => clearPlaytimeTicker();
+  }, [clearPlaytimeTicker, playback.phase]);
 
   useEffect(() => {
     setPlayback((prev) => {
@@ -2793,6 +2921,8 @@ function Dashboard() {
   const viewportDisplay = `x ${Math.round(canvasViewport.x)}, y ${Math.round(canvasViewport.y)}, z ${canvasViewport.zoom.toFixed(2)}, panel ${Math.round(sidebarWidth)}px`;
   const graphFontScalePercent = Math.round(graphFontScale * 100);
   const graphFontScaleDisplay = t(locale, 'graphTextScaleValue').replace('{percent}', String(graphFontScalePercent));
+  const playSpeedDisplay = t(locale, 'playSpeedValue').replace('{speed}', playSpeed.toFixed(playSpeed % 1 === 0 ? 0 : 2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1'));
+  const playtimeDisplay = formatPlaytime(playtimeElapsedMs);
   const playbackControlTitle = playback.phase === 'running'
     ? t(locale, 'pause')
     : playback.phase === 'gate'
@@ -2902,6 +3032,21 @@ function Dashboard() {
                       <span className="settings-range-value">{graphFontScaleDisplay}</span>
                     </div>
                   </label>
+                  <label className="settings-field">
+                    <span className="settings-label">{t(locale, 'playSpeed')}</span>
+                    <div className="settings-range-row">
+                      <input
+                        className="settings-range-input"
+                        type="range"
+                        min={MIN_PLAY_SPEED}
+                        max={MAX_PLAY_SPEED}
+                        step={0.25}
+                        value={playSpeed}
+                        onChange={(event) => setPlaySpeed(Number.parseFloat(event.target.value))}
+                      />
+                      <span className="settings-range-value">{playSpeedDisplay}</span>
+                    </div>
+                  </label>
                   <div className="settings-field">
                     <span className="settings-label">{t(locale, 'canvasView')}</span>
                     <div className="settings-actions">
@@ -2918,6 +3063,18 @@ function Dashboard() {
                   </div>
                   <div className="settings-switch-stack">
                     <label className="settings-field settings-switch-field">
+                      <span className="settings-label">{t(locale, 'continuousPlay')}</span>
+                      <button
+                        type="button"
+                        className={cn('settings-switch', continuousPlay && 'settings-switch-active')}
+                        onClick={() => setContinuousPlay((enabled) => !enabled)}
+                        aria-pressed={continuousPlay}
+                        title={t(locale, 'continuousPlay')}
+                      >
+                        <span className="settings-switch-thumb" />
+                      </button>
+                    </label>
+                    <label className="settings-field settings-switch-field">
                       <span className="settings-label">{t(locale, 'debugMode')}</span>
                       <button
                         type="button"
@@ -2929,20 +3086,24 @@ function Dashboard() {
                         <span className="settings-switch-thumb" />
                       </button>
                     </label>
-                    {debugMode && (
-                      <label className="settings-field settings-switch-field">
-                        <span className="settings-label">{t(locale, 'backend')}</span>
-                        <button
-                          type="button"
-                          className={cn('settings-switch', backendEnabled && 'settings-switch-active')}
-                          onClick={() => setBackendEnabled((enabled) => !enabled)}
-                          aria-pressed={backendEnabled}
-                          title={t(locale, 'backend')}
-                        >
-                          <span className="settings-switch-thumb" />
-                        </button>
-                      </label>
-                    )}
+                    <label className="settings-field settings-switch-field">
+                      <span className="settings-label">{t(locale, 'backend')}</span>
+                      <button
+                        type="button"
+                        className={cn('settings-switch', backendEnabled && 'settings-switch-active', !debugMode && 'settings-switch-disabled')}
+                        onClick={() => {
+                          if (!debugMode) {
+                            return;
+                          }
+                          setBackendEnabled((enabled) => !enabled);
+                        }}
+                        aria-pressed={backendEnabled}
+                        title={t(locale, 'backend')}
+                        disabled={!debugMode}
+                      >
+                        <span className="settings-switch-thumb" />
+                      </button>
+                    </label>
                   </div>
                   <div className="settings-actions">
                     <button className="primary-button settings-button" onClick={() => persistBackendEndpoint(backendEndpointDraft)}>{t(locale, 'save')}</button>
@@ -2952,6 +3113,7 @@ function Dashboard() {
                     <StatItem label={t(locale, 'stage')} value={String(backendStage)} />
                     <StatItem label={t(locale, 'poll')} value={!backendEnabled ? t(locale, 'ignored') : backendConnected ? t(locale, 'connected') : t(locale, 'disconnected')} />
                     <StatItem label={t(locale, 'updated')} value={lastBackendPollAt ? new Date(lastBackendPollAt).toLocaleTimeString(locale) : t(locale, 'never')} />
+                    <StatItem label={t(locale, 'playtime')} value={playtimeDisplay} />
                     <StatItem label={t(locale, 'canvas')} value={viewportDisplay} />
                   </div>
                   {backendError && <div className="script-error">{backendError}</div>}
@@ -2996,6 +3158,12 @@ function Dashboard() {
           onWheel={handleCanvasWheel}
           style={{ '--graph-font-scale': String(graphFontScale) } as CSSProperties}
         >
+          {canvasCaption && (
+            <div className={cn("canvas-caption-card", canvasCaptionLeaving && "canvas-caption-card-leaving")}>
+              <span className="canvas-caption-kicker">{t(locale, 'currentStep')}</span>
+              <span className="canvas-caption-title">{canvasCaption.title}</span>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -3285,16 +3453,11 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
       data.appearance === 'pill' && "mission-node-pill-shell",
       data.appearance === 'phone' && "mission-node-phone-shell",
       (data.appearance === 'robot' || data.appearance === 'robot-arm') && "mission-node-robot-shell",
+      data.nodeId === 'acn-agent' && "mission-node-acn-agent-shell",
       data.nodeId === 'ott-ordering' && "mission-node-ordering-shell",
       data.kind === 'robot' && data.message && "mission-node-robot-bubble",
       (data.message || data.plan) && "mission-node-with-bubble",
     )} style={{ '--node-tint': meta.tint } as any}>
-      {data.caption && (
-        <div className={cn("mission-node-caption", data.captionLeaving && "mission-node-caption-leaving")}>
-          <span className="mission-node-caption-kicker">{data.captionLabel}</span>
-          <span className="mission-node-caption-title">{data.caption}</span>
-        </div>
-      )}
       {data.plan && (
         <div className={cn("mission-node-plan", data.planLeaving && "mission-node-plan-leaving")}>
           <div className="mission-node-plan-header">
@@ -3324,7 +3487,7 @@ function MissionNode({ data }: NodeProps<Node<DemoNodeData>>) {
         </div>
       )}
       {data.message && (
-        !data.caption && (
+        !data.suppressMessage && (
         <div className={cn("mission-node-bubble", data.messageState === 'done' && "mission-node-bubble-done", data.messageLeaving && "mission-node-bubble-leaving")}>
           <BubbleIconGlyph icon={data.messageIcon} state={data.messageState} />
           <span>{data.message}</span>
@@ -3565,25 +3728,25 @@ function StatusBadge({ label, tone, icon }: any) {
 }
 
 const LAYOUT = {
-  ott: { x: 980, y: 72, width: 306, height: 228 },
+  ott: { x: 980, y: 84, width: 306, height: 212 },
   mno: { x: 980, y: 356, width: 424, height: 296 },
-  core: { x: 36, y: 36, width: 860, height: 420 },
+  core: { x: 36, y: 108, width: 860, height: 348 },
   access: { x: 36, y: 492, width: 760, height: 232 },
-  bus: { x: 212, y: 216, width: 508, height: 24 },
+  bus: { x: 212, y: 236, width: 508, height: 24 },
   nodes: {
-    idm: { x: 218, y: 116, width: 136 },
-    acnAgent: { x: 558, y: 116, width: 176 },
-    srf: { x: 150, y: 288, width: 128 },
-    scf: { x: 322, y: 288, width: 128 },
-    up: { x: 482, y: 288, width: 128 },
-    cmccGw: { x: 649, y: 288, width: 168 },
+    idm: { x: 218, y: 140, width: 136 },
+    acnAgent: { x: 558, y: 140, width: 176 },
+    srf: { x: 150, y: 308, width: 128 },
+    scf: { x: 322, y: 308, width: 128 },
+    up: { x: 482, y: 308, width: 128 },
+    cmccGw: { x: 649, y: 308, width: 168 },
     ran: { x: 202, y: 572, width: 128 },
     phone: { x: 392, y: 520, width: 296, height: 136 },
     robotDog: { x: 392, y: 678, width: 344, collapsedWidth: 156, height: 112 },
     phoneAgentCard: { x: 578, y: 532, width: 174 },
     agentCard: { x: 578, y: 592, width: 220 },
-    ottOrdering: { x: 1098.7776623098334, y: 93.77870152133133, width: 148 },
-    ottGw: { x: 1000, y: 204, width: 168 },
+    ottOrdering: { x: 1098.7776623098334, y: 112, width: 148 },
+    ottGw: { x: 1000, y: 216, width: 168 },
     mnoGw: { x: 1000, y: 404, width: 168 },
     mnoEndpoint: { x: 1096, y: 488, width: 304, height: 132 },
     armAgentCard: { x: 1120, y: 612, width: 174 },
@@ -3631,10 +3794,8 @@ function buildGraph(
   const bubbleIconFor = (nodeId: string) => playback.bubbleIcons[nodeId] ?? transitioningBubbles[nodeId]?.icon;
   const bubbleStateFor = (nodeId: string) => playback.bubbleStates[nodeId] ?? transitioningBubbles[nodeId]?.state;
   const bubbleLeavingFor = (nodeId: string) => !playback.bubbles[nodeId] && Boolean(transitioningBubbles[nodeId]);
-  const captionFor = (nodeId: string) => (
-    playback.graphCaption?.nodeId === nodeId ? playback.graphCaption.title : transitioningCaptions[nodeId]?.title
-  );
-  const captionLeavingFor = (nodeId: string) => playback.graphCaption?.nodeId !== nodeId && Boolean(transitioningCaptions[nodeId]);
+  const captionedNodeId = playback.graphCaption?.nodeId ?? Object.keys(transitioningCaptions)[0];
+  const suppressBubbleFor = (nodeId: string) => captionedNodeId === nodeId;
   const planFor = (nodeId: string) => (
     playback.planBubble?.nodeId === nodeId ? playback.planBubble : transitioningPlans[nodeId]
   );
@@ -3719,9 +3880,7 @@ function buildGraph(
             data: {
               ...node.data,
               nodeId: (node.data as DemoNodeData).nodeId ?? node.id,
-              captionLabel: t(locale, 'currentStep'),
-              caption: captionFor(node.id),
-              captionLeaving: captionLeavingFor(node.id),
+              suppressMessage: suppressBubbleFor(node.id),
             },
           }
         : node
