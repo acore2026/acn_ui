@@ -190,6 +190,7 @@ type PlaybackFrame = {
 };
 type RetainedBubble = { text: string; state: 'processing' | 'done'; icon?: BubbleIcon };
 type RetainedGraphCaption = NonNullable<PlaybackFrame['graphCaption']>;
+type RetainedCanvasCaption = { title: string };
 type RetainedPlan = NonNullable<PlaybackFrame['planBubble']>;
 type BackendStatus = { stage: number };
 
@@ -1603,6 +1604,12 @@ function createIdleFrame(
 ): PlaybackFrame {
   const stage = script.stages[stageIndex];
   const nextStage = script.stages[stageIndex + 1];
+  const action = stage ? flattenStage(stage)[actionIndex] : undefined;
+  const pausedStepLabel = action ? getActionDisplayLabel(action, locale) : undefined;
+  const pausedCaptionTitle = action
+    ? resolveCopy(action.presentation?.title, locale, pausedStepLabel)
+    : undefined;
+  const pausedCaptionNodeId = action ? getActionCaptionNode(action) : undefined;
   const checklistItems = stage ? flattenStage(stage).map((item) => ({
     id: item.id,
     label: getActionDisplayLabel(item, locale),
@@ -1617,6 +1624,7 @@ function createIdleFrame(
     activeEdgeTone: retainedActivity?.activeEdgeTone,
     currentStageTitle: stage ? resolveCopy(stage.title, locale) : undefined,
     nextStageTitle: nextStage ? resolveCopy(nextStage.title, locale) : t(locale, 'finish'),
+    currentStepLabel: phase === 'paused' ? pausedStepLabel : undefined,
     activeNodeIds: retainedActivity?.activeNodeIds ?? [],
     activeEdgeIds: retainedActivity?.activeEdgeIds ?? [],
     activeEdgeDirections: retainedActivity?.activeEdgeDirections ?? {},
@@ -1625,7 +1633,9 @@ function createIdleFrame(
     bubbles: {},
     bubbleStates: {},
     bubbleIcons: {},
-    graphCaption: undefined,
+    graphCaption: phase === 'paused' && pausedCaptionTitle && pausedCaptionNodeId
+      ? { nodeId: pausedCaptionNodeId, title: pausedCaptionTitle }
+      : undefined,
     planBubble: undefined,
     checklistItems,
   };
@@ -2033,6 +2043,28 @@ function derivePresentationCard(
   };
 }
 
+function deriveCanvasCaptionTitle(
+  playback: PlaybackFrame,
+  locale: Locale,
+) {
+  if (playback.phase === 'standby') {
+    return undefined;
+  }
+  if (playback.phase === 'running') {
+    return playback.graphCaption?.title;
+  }
+  if (playback.phase === 'complete') {
+    return playback.stageIndex === 3 ? t(locale, 'finalTitle') : t(locale, 'workflowCompleteTitle');
+  }
+  if (playback.phase === 'gate') {
+    if (playback.stageIndex === 0) return t(locale, 'stage0GateTitle');
+    if (playback.stageIndex === 1) return t(locale, 'stage1GateTitle');
+    if (playback.stageIndex === 2) return t(locale, 'stage2GateTitle');
+    if (playback.stageIndex === 3) return t(locale, 'finalTitle');
+  }
+  return playback.graphCaption?.title ?? playback.currentStepLabel;
+}
+
 function applyActionVisibility(visibleOverrideNodeIds: string[], action?: FlatAction) {
   if (!action) {
     return visibleOverrideNodeIds;
@@ -2282,6 +2314,7 @@ function Dashboard() {
   const [transitioningEdgeIds, setTransitioningEdgeIds] = useState<string[]>([]);
   const [transitioningBubbles, setTransitioningBubbles] = useState<Record<string, RetainedBubble>>({});
   const [transitioningCaptions, setTransitioningCaptions] = useState<Record<string, RetainedGraphCaption>>({});
+  const [transitioningCanvasCaption, setTransitioningCanvasCaption] = useState<RetainedCanvasCaption | null>(null);
   const [transitioningPlans, setTransitioningPlans] = useState<Record<string, RetainedPlan>>({});
   const [backendEndpointDraft, setBackendEndpointDraft] = useState(() => getInitialBackendEndpointDraft());
   const [backendEndpoint, setBackendEndpoint] = useState(() => normalizeBackendEndpoint(getInitialBackendEndpointDraft()));
@@ -2313,8 +2346,9 @@ function Dashboard() {
     edgeIds: string[];
     bubbles: Record<string, RetainedBubble>;
     graphCaption?: RetainedGraphCaption;
+    canvasCaption?: RetainedCanvasCaption;
     planBubble?: RetainedPlan;
-  }>({ nodeIds: [], edgeIds: [], bubbles: {}, graphCaption: undefined, planBubble: undefined });
+  }>({ nodeIds: [], edgeIds: [], bubbles: {}, graphCaption: undefined, canvasCaption: undefined, planBubble: undefined });
   const transitionTimerRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const autoAdvanceTimerRef = useRef<number | null>(null);
@@ -2359,6 +2393,8 @@ function Dashboard() {
   useEffect(() => {
     playbackRef.current = playback;
   }, [playback]);
+
+  const nextCanvasCaptionTitle = deriveCanvasCaptionTitle(playback, locale);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -2493,6 +2529,7 @@ function Dashboard() {
       Object.entries(playback.bubbles).map(([nodeId, text]) => [nodeId, { text, state: playback.bubbleStates[nodeId] ?? 'processing', icon: playback.bubbleIcons[nodeId] }]),
     ) as Record<string, RetainedBubble>;
     const nextCaption = playback.graphCaption;
+    const nextCanvasCaption = nextCanvasCaptionTitle ? { title: nextCanvasCaptionTitle } : undefined;
     const nextPlan = playback.planBubble;
     const leavingEdgeIds = previous.edgeIds.filter((id) => !nextEdgeIds.includes(id));
     const leavingBubbles = Object.fromEntries(
@@ -2508,6 +2545,12 @@ function Dashboard() {
     )
       ? previous.graphCaption
       : undefined;
+    const leavingCanvasCaption = previous.canvasCaption && (
+      !nextCanvasCaption
+      || nextCanvasCaption.title !== previous.canvasCaption.title
+    )
+      ? previous.canvasCaption
+      : undefined;
     const leavingPlan = previous.planBubble && (
       !nextPlan
       || nextPlan.nodeId !== previous.planBubble.nodeId
@@ -2516,19 +2559,21 @@ function Dashboard() {
     )
       ? previous.planBubble
       : undefined;
-    transitionRef.current = { nodeIds: nextNodeIds, edgeIds: nextEdgeIds, bubbles: nextBubbles, graphCaption: nextCaption, planBubble: nextPlan };
+    transitionRef.current = { nodeIds: nextNodeIds, edgeIds: nextEdgeIds, bubbles: nextBubbles, graphCaption: nextCaption, canvasCaption: nextCanvasCaption, planBubble: nextPlan };
     clearTransitionTimer();
-    if (leavingEdgeIds.length || Object.keys(leavingBubbles).length || leavingCaption || leavingPlan) {
+    if (leavingEdgeIds.length || Object.keys(leavingBubbles).length || leavingCaption || leavingCanvasCaption || leavingPlan) {
       setTransitioningNodeIds([]);
       setTransitioningEdgeIds(leavingEdgeIds);
       setTransitioningBubbles(leavingBubbles);
       setTransitioningCaptions(leavingCaption ? { [leavingCaption.nodeId]: leavingCaption } : {});
+      setTransitioningCanvasCaption(leavingCanvasCaption ?? null);
       setTransitioningPlans(leavingPlan ? { [leavingPlan.nodeId]: leavingPlan } : {});
       transitionTimerRef.current = window.setTimeout(() => {
         setTransitioningNodeIds([]);
         setTransitioningEdgeIds([]);
         setTransitioningBubbles({});
         setTransitioningCaptions({});
+        setTransitioningCanvasCaption(null);
         setTransitioningPlans({});
         transitionTimerRef.current = null;
       }, 260);
@@ -2537,9 +2582,10 @@ function Dashboard() {
       setTransitioningEdgeIds([]);
       setTransitioningBubbles({});
       setTransitioningCaptions({});
+      setTransitioningCanvasCaption(null);
       setTransitioningPlans({});
     }
-  }, [clearTransitionTimer, playback.activeEdgeIds, playback.activeNodeIds, playback.bubbles, playback.bubbleStates, playback.graphCaption, playback.planBubble]);
+  }, [clearTransitionTimer, nextCanvasCaptionTitle, playback.activeEdgeIds, playback.activeNodeIds, playback.bubbles, playback.bubbleStates, playback.graphCaption, playback.planBubble]);
 
   const applyScriptText = useCallback((nextText: string) => {
     setScriptText(nextText);
@@ -2791,8 +2837,8 @@ function Dashboard() {
     }));
     setEdges(graph.edges);
   }, [locale, playback, scriptDoc, transitioningBubbles, transitioningCaptions, transitioningEdgeIds, transitioningNodeIds, transitioningPlans]);
-  const canvasCaption = playback.graphCaption ?? Object.values(transitioningCaptions)[0];
-  const canvasCaptionLeaving = !playback.graphCaption && Boolean(canvasCaption);
+  const canvasCaptionTitle = nextCanvasCaptionTitle ?? transitioningCanvasCaption?.title;
+  const canvasCaptionLeaving = !nextCanvasCaptionTitle && Boolean(canvasCaptionTitle);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -3174,10 +3220,17 @@ function Dashboard() {
           onWheel={handleCanvasWheel}
           style={{ '--graph-font-scale': String(graphFontScale) } as CSSProperties}
         >
-          {canvasCaption && (
+          {canvasCaptionTitle && (
             <div className={cn("canvas-caption-card", canvasCaptionLeaving && "canvas-caption-card-leaving")}>
-              <span className="canvas-caption-kicker">{t(locale, 'currentStep')}</span>
-              <span className="canvas-caption-title">{canvasCaption.title}</span>
+              <span className="canvas-caption-glow" aria-hidden="true" />
+              <span className="canvas-caption-aura" aria-hidden="true" />
+              <span className="canvas-caption-edge" aria-hidden="true" />
+              <div key={canvasCaptionTitle} className="canvas-caption-content">
+                <span className="canvas-caption-kicker">{t(locale, 'currentStep')}</span>
+                <span className={cn("canvas-caption-title", locale === "zh-CN" && "canvas-caption-title-zh")}>
+                  {canvasCaptionTitle}
+                </span>
+              </div>
             </div>
           )}
           <div className="canvas-legend" aria-label="Plane legend">
