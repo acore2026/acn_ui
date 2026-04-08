@@ -202,6 +202,8 @@ const DEFAULT_VIEWPORT: Viewport = { x: -22, y: 42, zoom: 1.24 };
 const GRAPH_FONT_SCALE_STORAGE_KEY = 'acn-ui-graph-font-scale';
 const CANVAS_VIEWPORT_STORAGE_KEY = 'acn-ui-canvas-viewport';
 const SIDEBAR_WIDTH_STORAGE_KEY = 'acn-ui-sidebar-width';
+const CAPTION_CARD_SCALE_STORAGE_KEY = 'acn-ui-caption-card-scale';
+const CAPTION_OFFSET_STORAGE_KEY = 'acn-ui-caption-offset';
 const CONTINUOUS_PLAY_STORAGE_KEY = 'acn-ui-continuous-play';
 const PLAY_SPEED_STORAGE_KEY = 'acn-ui-play-speed';
 const DEFAULT_SIDEBAR_WIDTH = 487;
@@ -210,6 +212,10 @@ const MAX_SIDEBAR_WIDTH = 560;
 const DEFAULT_GRAPH_FONT_SCALE = 1.2;
 const MIN_GRAPH_FONT_SCALE = 0.9;
 const MAX_GRAPH_FONT_SCALE = 1.6;
+const DEFAULT_CAPTION_CARD_SCALE = 1;
+const MIN_CAPTION_CARD_SCALE = 0.85;
+const MAX_CAPTION_CARD_SCALE = 1.35;
+const DEFAULT_CAPTION_OFFSET = { x: 0, y: 0 };
 const GRAPH_ZOOM_STEP = 1.03;
 const CONTINUOUS_PLAY_GATE_DELAY_MS = 1000;
 const DEFAULT_PLAY_SPEED = 1;
@@ -273,6 +279,7 @@ const CATALOG_KEY_ALIASES: Record<string, string> = {
   showScript: 'ui.settings.showScript',
   hideScript: 'ui.settings.hideScript',
   graphTextSize: 'ui.settings.graphTextSize',
+  captionCardSize: 'ui.settings.captionCardSize',
   graphTextScaleValue: 'ui.settings.graphTextScaleValue',
   playSpeed: 'ui.settings.playSpeed',
   playSpeedValue: 'ui.settings.playSpeedValue',
@@ -378,6 +385,36 @@ function getInitialCanvasViewport(): Viewport {
     };
   } catch {
     return DEFAULT_VIEWPORT;
+  }
+}
+
+function getInitialCaptionCardScale() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_CAPTION_CARD_SCALE;
+  }
+  const raw = Number.parseFloat(window.localStorage.getItem(CAPTION_CARD_SCALE_STORAGE_KEY) ?? '');
+  if (!Number.isFinite(raw)) {
+    return DEFAULT_CAPTION_CARD_SCALE;
+  }
+  return Math.min(MAX_CAPTION_CARD_SCALE, Math.max(MIN_CAPTION_CARD_SCALE, raw));
+}
+
+function getInitialCaptionOffset() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_CAPTION_OFFSET;
+  }
+  try {
+    const raw = window.localStorage.getItem(CAPTION_OFFSET_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_CAPTION_OFFSET;
+    }
+    const parsed = JSON.parse(raw) as Partial<typeof DEFAULT_CAPTION_OFFSET>;
+    if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') {
+      return DEFAULT_CAPTION_OFFSET;
+    }
+    return { x: parsed.x, y: parsed.y };
+  } catch {
+    return DEFAULT_CAPTION_OFFSET;
   }
 }
 
@@ -2325,6 +2362,8 @@ function Dashboard() {
   const [lastBackendPollAt, setLastBackendPollAt] = useState<number | null>(null);
   const [canvasViewport, setCanvasViewport] = useState<Viewport>(() => getInitialCanvasViewport());
   const [graphFontScale, setGraphFontScale] = useState(() => getInitialGraphFontScale());
+  const [captionCardScale, setCaptionCardScale] = useState(() => getInitialCaptionCardScale());
+  const [captionOffset, setCaptionOffset] = useState(() => getInitialCaptionOffset());
   const [playSpeed, setPlaySpeed] = useState(() => getInitialPlaySpeed());
   const [continuousPlay, setContinuousPlay] = useState(() => getInitialContinuousPlay());
   const [backendEnabled, setBackendEnabled] = useState(() => !initialDebugMode);
@@ -2357,6 +2396,8 @@ function Dashboard() {
   const playtimeAccumulatedRef = useRef(0);
   const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
   const sidebarResizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
+  const captionDragStartRef = useRef<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
+  const [captionDragging, setCaptionDragging] = useState(false);
 
   useEffect(() => {
     scriptRef.current = scriptDoc;
@@ -2421,6 +2462,18 @@ function Dashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CAPTION_CARD_SCALE_STORAGE_KEY, String(captionCardScale));
+    }
+  }, [captionCardScale]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CAPTION_OFFSET_STORAGE_KEY, JSON.stringify(captionOffset));
+    }
+  }, [captionOffset]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
       window.localStorage.setItem(PLAY_SPEED_STORAGE_KEY, String(playSpeed));
     }
   }, [playSpeed]);
@@ -2446,20 +2499,36 @@ function Dashboard() {
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       const start = sidebarResizeStartRef.current;
-      if (!start) {
+      if (start) {
+        const nextWidth = start.width + (start.pointerX - event.clientX);
+        setSidebarWidth(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth)));
         return;
       }
-      const nextWidth = start.width + (start.pointerX - event.clientX);
-      setSidebarWidth(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth)));
+      const captionStart = captionDragStartRef.current;
+      if (!captionStart) {
+        return;
+      }
+      setCaptionOffset({
+        x: captionStart.x + (event.clientX - captionStart.pointerX),
+        y: captionStart.y + (event.clientY - captionStart.pointerY),
+      });
     };
 
     const handlePointerUp = () => {
-      if (!sidebarResizeStartRef.current) {
-        return;
+      let released = false;
+      if (sidebarResizeStartRef.current) {
+        sidebarResizeStartRef.current = null;
+        released = true;
       }
-      sidebarResizeStartRef.current = null;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      if (captionDragStartRef.current) {
+        captionDragStartRef.current = null;
+        setCaptionDragging(false);
+        released = true;
+      }
+      if (released) {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -2651,10 +2720,27 @@ function Dashboard() {
     document.body.style.userSelect = 'none';
   }, [sidebarCollapsed, sidebarWidth]);
 
+  const startCaptionDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    captionDragStartRef.current = {
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      x: captionOffset.x,
+      y: captionOffset.y,
+    };
+    setCaptionDragging(true);
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+  }, [captionOffset.x, captionOffset.y]);
+
   const resetViewState = useCallback(() => {
     setSidebarCollapsed(false);
     setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
     setCanvasViewport(DEFAULT_VIEWPORT);
+    setCaptionCardScale(DEFAULT_CAPTION_CARD_SCALE);
+    setCaptionOffset(DEFAULT_CAPTION_OFFSET);
     const instance = reactFlowRef.current;
     if (instance) {
       void instance.setViewport(DEFAULT_VIEWPORT, { duration: 160 });
@@ -2662,6 +2748,8 @@ function Dashboard() {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(CANVAS_VIEWPORT_STORAGE_KEY);
       window.localStorage.removeItem(SIDEBAR_WIDTH_STORAGE_KEY);
+      window.localStorage.removeItem(CAPTION_CARD_SCALE_STORAGE_KEY);
+      window.localStorage.removeItem(CAPTION_OFFSET_STORAGE_KEY);
     }
   }, []);
 
@@ -2983,6 +3071,8 @@ function Dashboard() {
   const viewportDisplay = `x ${Math.round(canvasViewport.x)}, y ${Math.round(canvasViewport.y)}, z ${canvasViewport.zoom.toFixed(2)}, panel ${Math.round(sidebarWidth)}px`;
   const graphFontScalePercent = Math.round(graphFontScale * 100);
   const graphFontScaleDisplay = t(locale, 'graphTextScaleValue').replace('{percent}', String(graphFontScalePercent));
+  const captionCardScalePercent = Math.round(captionCardScale * 100);
+  const captionCardScaleDisplay = t(locale, 'graphTextScaleValue').replace('{percent}', String(captionCardScalePercent));
   const playSpeedDisplay = t(locale, 'playSpeedValue').replace('{speed}', playSpeed.toFixed(playSpeed % 1 === 0 ? 0 : 2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1'));
   const playtimeDisplay = formatPlaytime(playtimeElapsedMs);
   const playbackControlTitle = playback.phase === 'running'
@@ -3092,6 +3182,21 @@ function Dashboard() {
                         onChange={(event) => setGraphFontScale(Number.parseFloat(event.target.value))}
                       />
                       <span className="settings-range-value">{graphFontScaleDisplay}</span>
+                    </div>
+                  </label>
+                  <label className="settings-field">
+                    <span className="settings-label">{t(locale, 'captionCardSize')}</span>
+                    <div className="settings-range-row">
+                      <input
+                        className="settings-range-input"
+                        type="range"
+                        min={MIN_CAPTION_CARD_SCALE}
+                        max={MAX_CAPTION_CARD_SCALE}
+                        step={0.05}
+                        value={captionCardScale}
+                        onChange={(event) => setCaptionCardScale(Number.parseFloat(event.target.value))}
+                      />
+                      <span className="settings-range-value">{captionCardScaleDisplay}</span>
                     </div>
                   </label>
                   <label className="settings-field">
@@ -3218,10 +3323,21 @@ function Dashboard() {
         <section
           className="canvas-area"
           onWheel={handleCanvasWheel}
-          style={{ '--graph-font-scale': String(graphFontScale) } as CSSProperties}
+          style={{
+            '--graph-font-scale': String(graphFontScale),
+            '--caption-card-scale': String(captionCardScale),
+            '--caption-font-scale': String(captionCardScale),
+          } as CSSProperties}
         >
           {canvasCaptionTitle && (
-            <div className={cn("canvas-caption-card", canvasCaptionLeaving && "canvas-caption-card-leaving")}>
+            <div
+              className={cn("canvas-caption-card", captionDragging && "canvas-caption-card-dragging", canvasCaptionLeaving && "canvas-caption-card-leaving")}
+              onPointerDown={startCaptionDrag}
+              style={{
+                left: `calc(50% + ${captionOffset.x}px)`,
+                top: `${18 + captionOffset.y}px`,
+              }}
+            >
               <span className="canvas-caption-glow" aria-hidden="true" />
               <span className="canvas-caption-aura" aria-hidden="true" />
               <span className="canvas-caption-edge" aria-hidden="true" />
