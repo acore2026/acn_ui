@@ -2902,7 +2902,7 @@ function Dashboard() {
         throw new Error(`HTTP ${response.status}`);
       }
       const payload = await response.json() as BackendStatus;
-      const nextStage = Number.isFinite(payload.stage) ? Math.max(0, Math.min(4, Math.trunc(payload.stage))) : 0;
+      const nextStage = Number.isFinite(payload.stage) ? Math.max(0, Math.min(5, Math.trunc(payload.stage))) : 0;
       setBackendStage(nextStage);
       setBackendConnected(true);
       setBackendError(null);
