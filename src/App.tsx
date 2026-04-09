@@ -317,12 +317,15 @@ const CATALOG_KEY_ALIASES: Record<string, string> = {
   stage1Summary: 'narrative.stage1Summary',
   stage2Summary: 'narrative.stage2Summary',
   stage3Summary: 'narrative.stage3Summary',
+  stage4Summary: 'narrative.stage4Summary',
   stage0GateTitle: 'narrative.stage0GateTitle',
   stage0GateBody: 'narrative.stage0GateBody',
   stage1GateTitle: 'narrative.stage1GateTitle',
   stage1GateBody: 'narrative.stage1GateBody',
   stage2GateTitle: 'narrative.stage2GateTitle',
   stage2GateBody: 'narrative.stage2GateBody',
+  stage3GateTitle: 'narrative.stage3GateTitle',
+  stage3GateBody: 'narrative.stage3GateBody',
   workflowCompleteTitle: 'narrative.workflowCompleteTitle',
   workflowCompleteBody: 'narrative.workflowCompleteBody',
   stageCompleteFallback: 'narrative.stageCompleteFallback',
@@ -700,9 +703,9 @@ function getStageCompletionMessage(stageIndex: number, locale: Locale): Presenta
       return {
         kind: 'log',
         title: t(locale, 'messages.stage4Completed'),
-        body: 'Delivery complete after `RobotDog` and `RobotArm` completed peer verification.',
+        body: 'Peer verification and package handoff completed for `RobotDog` and `RobotArm`.',
         icon: 'log',
-        chips: ['NFC Verification', 'Task Completed'],
+        chips: ['NFC Verification', 'Handoff Complete'],
         details: buildDetails([
           buildSection(t(locale, 'sections.summary'), [
             localizeScenarioText(locale, getScenarioDoc('state_8')?.description),
@@ -1421,6 +1424,15 @@ stages:
           - node: robot-dog
             text: "{{script.stage4.handover.robotBubble}}"
             icon: done
+  - id: stage-5
+    title: "{{script.stage5.title}}"
+    steps:
+      - id: stage5-complete
+        kind: talk
+        delayMs: 1500
+        presentation:
+          title: "{{narrative.finalTitle}}"
+          body: "{{script.stage5.complete.body}}"
 `;
 
 function parseDemoScript(text: string): DemoScript {
@@ -1916,6 +1928,8 @@ function getFixedStageSummaryTitle(stageIndex: number, locale: Locale) {
       return t(locale, 'stage2Summary');
     case 3:
       return t(locale, 'stage3Summary');
+    case 4:
+      return t(locale, 'stage4Summary');
     default:
       return `Stage ${stageIndex + 1}`;
   }
@@ -1946,6 +1960,12 @@ function getStageNarrativeSnapshot(script: DemoScript, stageIndex: number, local
     };
   }
   if (stageIndex === 3) {
+    return {
+      title: t(locale, 'stage3GateTitle'),
+      body: t(locale, 'stage3GateBody'),
+    };
+  }
+  if (stageIndex === 4) {
     return buildFinalDeliveryPresentation([], locale);
   }
   const scenarioIds = firstAction ? (ACTION_SCENARIO_MAP[firstAction.id] ?? STAGE_SCENARIO_MAP[stageIndex] ?? []) : (STAGE_SCENARIO_MAP[stageIndex] ?? []);
@@ -2017,7 +2037,7 @@ function derivePresentationCard(
   }
 
   if (playback.phase === 'complete') {
-    if (playback.stageIndex === 3) {
+    if (playback.stageIndex === 4) {
       return buildFinalDeliveryPresentation(messages, locale);
     }
     const narrative = deriveScenarioNarrative(
@@ -2052,6 +2072,13 @@ function derivePresentationCard(
       };
     }
     if (playback.stageIndex === 3) {
+      return {
+        title: t(locale, 'stage3GateTitle'),
+        body: t(locale, 'stage3GateBody'),
+        messages,
+      };
+    }
+    if (playback.stageIndex === 4) {
       return buildFinalDeliveryPresentation(messages, locale);
     }
     const narrative = deriveScenarioNarrative(
@@ -2092,13 +2119,14 @@ function deriveCanvasCaptionTitle(
     return playback.graphCaption?.title;
   }
   if (playback.phase === 'complete') {
-    return playback.stageIndex === 3 ? t(locale, 'finalTitle') : t(locale, 'workflowCompleteTitle');
+    return playback.stageIndex === 4 ? t(locale, 'finalTitle') : t(locale, 'workflowCompleteTitle');
   }
   if (playback.phase === 'gate') {
     if (playback.stageIndex === 0) return t(locale, 'stage0GateTitle');
     if (playback.stageIndex === 1) return t(locale, 'stage1GateTitle');
     if (playback.stageIndex === 2) return t(locale, 'stage2GateTitle');
-    if (playback.stageIndex === 3) return t(locale, 'finalTitle');
+    if (playback.stageIndex === 3) return t(locale, 'stage3GateTitle');
+    if (playback.stageIndex === 4) return t(locale, 'finalTitle');
   }
   return playback.graphCaption?.title ?? playback.currentStepLabel;
 }

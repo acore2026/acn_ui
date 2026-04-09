@@ -56,18 +56,21 @@
   "narrative.currentStep": { "en": "Current step", "zh-CN": "当前任务" },
   "narrative.standbyTitle": { "en": "Connect robots and place an order", "zh-CN": "连接机器人并发起订单" },
   "narrative.standbyBody": { "en": "- **Phone** and **Delivery Robot** are already online.\n- Both devices are registered and ready for the next workflow.\n- Start onboarding a robot or issue a new delivery request.", "zh-CN": "- **手机** 与 **送餐机器人** 已在线。\n- 两台设备均已完成注册，可进入下一步流程。\n- 现在可以开始接入机器人，或发起新的配送请求。" },
-  "narrative.finalTitle": { "en": "Delivery completed successfully", "zh-CN": "配送已成功完成" },
+  "narrative.finalTitle": { "en": "Delivery completed!", "zh-CN": "配送已成功完成" },
   "narrative.finalBody": { "en": "- **Robot Dog** and **Delivery Robot** completed peer verification.\n- The handoff finished and the task is now closed.", "zh-CN": "- **机器狗** 与 **送餐机器人** 已完成对等身份校验。\n- 交接已完成，任务现已结束。" },
   "narrative.stage0Summary": { "en": "Onboard Family Domain", "zh-CN": "接入家庭域" },
   "narrative.stage1Summary": { "en": "Discover And Assign Courier", "zh-CN": "发现并指派配送机器人" },
   "narrative.stage2Summary": { "en": "Notify And Coordinate Delivery", "zh-CN": "通知用户并协调配送" },
   "narrative.stage3Summary": { "en": "Verify And Close Handoff", "zh-CN": "校验并完成交接" },
+  "narrative.stage4Summary": { "en": "Delivery Completed", "zh-CN": "配送已完成" },
   "narrative.stage0GateTitle": { "en": "Family domain created and ready", "zh-CN": "家庭域创建成功" },
   "narrative.stage0GateBody": { "en": "- **Family Domain** is now active.\n- Members: **UE Assistant** and **RobotDog**.\n- Domain ID: `4sg520s2.acn.domain.cmcc`.", "zh-CN": "- **家庭智能体域** 已激活。\n- 成员：**手机终端** 与 **机器狗**。\n- 域 ID：`4sg520s2.acn.domain.cmcc`。" },
   "narrative.stage1GateTitle": { "en": "Courier discovered and pickup assigned", "zh-CN": "已发现配送机器人并下发取件任务" },
   "narrative.stage1GateBody": { "en": "- **RobotArm** has been selected as the courier.\n- The pickup task has been delivered across both gateways.", "zh-CN": "- 已选择 **送餐机器人** 作为配送者。\n- 取件任务已通过双侧网关完成下发。" },
   "narrative.stage2GateTitle": { "en": "User notified and delivery is underway", "zh-CN": "用户已收到通知，配送正在进行" },
   "narrative.stage2GateBody": { "en": "- The phone has received the **RobotArm** identity.\n- The delivery workflow is now moving into live coordination.", "zh-CN": "- 手机已收到 **送餐机器人** 的身份信息。\n- 配送流程现已进入实时协同阶段。" },
+  "narrative.stage3GateTitle": { "en": "Stage 4 completed", "zh-CN": "阶段 4 已完成" },
+  "narrative.stage3GateBody": { "en": "- **Robot Dog** and **Delivery Robot** completed peer verification.\n- The package handoff is finished and the demo can advance to the final title.", "zh-CN": "- **机器狗** 与 **送餐机器人** 已完成对等身份校验。\n- 餐品交接已完成，演示可进入最终标题页。" },
   "narrative.workflowCompleteTitle": { "en": "The autonomous delivery workflow is complete", "zh-CN": "自治配送流程已完成" },
   "narrative.workflowCompleteBody": { "en": "- **Identity**, **domain creation**, **dispatch**, **location sharing**, and **peer verification** all completed successfully.", "zh-CN": "- **身份签发**、**域创建**、**任务派发**、**位置共享** 与 **对等校验** 均已成功完成。" },
   "narrative.stageCompleteFallback": { "en": "is complete", "zh-CN": "已完成" },
@@ -233,5 +236,8 @@
   "script.stage4.handover.title": { "en": "The robots begin the package handoff", "zh-CN": "餐品交接" },
   "script.stage4.handover.body": { "en": "- The peer identity check has succeeded.\n- Both robots proceed with the package handoff.", "zh-CN": "- 对等身份校验已成功完成。\n- 双方机器人开始进行交接。" },
   "script.stage4.handover.endpointBubble": { "en": "Verified, comencing package handover!", "zh-CN": "校验通过，开始交接！" },
-  "script.stage4.handover.robotBubble": { "en": "Verified, comencing package handover!", "zh-CN": "校验通过，开始交接！" }
+  "script.stage4.handover.robotBubble": { "en": "Verified, comencing package handover!", "zh-CN": "校验通过，开始交接！" },
+
+  "script.stage5.title": { "en": "STAGE 5", "zh-CN": "阶段 5" },
+  "script.stage5.complete.body": { "en": "- **Robot Dog** and **Delivery Robot** completed peer verification.\n- The handoff finished and the task is now closed.", "zh-CN": "- **机器狗** 与 **送餐机器人** 已完成对等身份校验。\n- 交接已完成，任务现已结束。" }
 }
