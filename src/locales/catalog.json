@@ -107,7 +107,7 @@
   "scenario.description.findCourier": { "en": "Find courier", "zh-CN": "寻找配送员" },
   "scenario.description.courierPickingUpOrder": { "en": "Courier picking up the order", "zh-CN": "配送员正在取餐" },
   "scenario.description.outForDelivery": { "en": "Out for delivery", "zh-CN": "配送途中" },
-  "scenario.description.orderCompleted": { "en": "Order completed", "zh-CN": "订单已完成" },
+  "scenario.description.orderCompleted": { "en": "Verify both robots before handoff", "zh-CN": "数字身份互认" },
   "scenario.action.applyDigitalId": { "en": "Apply for a digital ID", "zh-CN": "申请数字身份" },
   "scenario.action.applyDigitalIdFor": { "en": "Apply for a digital ID for {subject}", "zh-CN": "为 {subject} 申请数字身份" },
   "scenario.action.agentProfileOf": { "en": "Agent profile of {subject}", "zh-CN": "{subject} 的智能体档案" },
