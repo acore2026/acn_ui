@@ -41,7 +41,7 @@
   "ui.controls.nextStep": { "en": "Next Step", "zh-CN": "下一步" },
   "ui.sidebar.expandNarrativeTray": { "en": "Expand narrative tray", "zh-CN": "展开叙事面板" },
   "ui.sidebar.collapseNarrativeTray": { "en": "Collapse narrative tray", "zh-CN": "收起叙事面板" },
-  "ui.sidebar.aiNarrative": { "en": "AI Narrative", "zh-CN": "智能体规划推理" },
+  "ui.sidebar.aiNarrative": { "en": "AI Narrative", "zh-CN": "网络推理链" },
   "ui.sidebar.agentMessages": { "en": "Agent Messages", "zh-CN": "智能体消息" },
   "ui.sidebar.inProgress": { "en": "In Progress", "zh-CN": "进行中" },
   "ui.sidebar.done": { "en": "Done", "zh-CN": "已完成" },
