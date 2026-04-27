@@ -185,7 +185,7 @@
   "script.stage1.publishAgentCard.done": { "en": "Agent Card Published", "zh-CN": "智能体名片已发布" },
   "script.stage1.publishAgentCard.gatewayBubble": { "en": "Agent Card Added", "zh-CN": "智能体名片已添加" },
 
-  "script.stage1.familyDomain.title": { "en": "Create the family domain", "zh-CN": "创建家庭域" },
+  "script.stage1.familyDomain.title": { "en": "Create the family domain", "zh-CN": "配置家庭域数据网络" },
   "script.stage1.familyDomain.body": { "en": "- **User-plane** and **service** functions allocate the private domain environment.\n- Access credentials and traffic policy are provisioned together.", "zh-CN": "- **用户面** 与 **业务功能** 将共同分配私有域环境。\n- 接入凭证与流量策略会一并开通。" },
   "script.stage1.familyDomain.plan": { "en": "Set Up Family Domain", "zh-CN": "建立家庭域" },
   "script.stage1.familyDomain.processing": { "en": "Setting Up Family Domain", "zh-CN": "正在建立家庭域" },
